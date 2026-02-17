@@ -3,6 +3,10 @@
 #include "CoreMinimal.h"
 #include "Json.h"
 
+#ifndef ANY_PACKAGE
+#define ANY_PACKAGE nullptr
+#endif
+
 // Forward declarations
 class AActor;
 class UBlueprint;

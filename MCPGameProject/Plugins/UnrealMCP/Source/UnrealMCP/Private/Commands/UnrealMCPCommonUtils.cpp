@@ -25,6 +25,57 @@
 #include "BlueprintActionDatabase.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Misc/PackageName.h"
+#include "Modules/ModuleManager.h"
+
+namespace
+{
+void AddBlueprintCandidatePath(TArray<FString>& OutCandidatePaths, const FString& InPath)
+{
+    FString Path = InPath;
+    Path.TrimStartAndEndInline();
+    if (Path.IsEmpty())
+    {
+        return;
+    }
+
+    if (Path.EndsWith(TEXT("_C")))
+    {
+        Path.LeftChopInline(2, EAllowShrinking::No);
+    }
+
+    OutCandidatePaths.AddUnique(Path);
+
+    if (!Path.Contains(TEXT(".")))
+    {
+        const FString AssetName = FPackageName::GetShortName(Path);
+        if (!AssetName.IsEmpty())
+        {
+            OutCandidatePaths.AddUnique(Path + TEXT(".") + AssetName);
+        }
+    }
+}
+
+UBlueprint* ResolveBlueprintFromObject(UObject* LoadedObject)
+{
+    if (!LoadedObject)
+    {
+        return nullptr;
+    }
+
+    if (UBlueprint* Blueprint = Cast<UBlueprint>(LoadedObject))
+    {
+        return Blueprint;
+    }
+
+    if (UClass* LoadedClass = Cast<UClass>(LoadedObject))
+    {
+        return Cast<UBlueprint>(LoadedClass->ClassGeneratedBy);
+    }
+
+    return nullptr;
+}
+}
 
 // JSON Utilities
 TSharedPtr<FJsonObject> FUnrealMCPCommonUtils::CreateErrorResponse(const FString& Message)
@@ -153,8 +204,75 @@ UBlueprint* FUnrealMCPCommonUtils::FindBlueprint(const FString& BlueprintName)
 
 UBlueprint* FUnrealMCPCommonUtils::FindBlueprintByName(const FString& BlueprintName)
 {
-    FString AssetPath = TEXT("/Game/Blueprints/") + BlueprintName;
-    return LoadObject<UBlueprint>(nullptr, *AssetPath);
+    FString SearchKey = BlueprintName;
+    SearchKey.TrimStartAndEndInline();
+    if (SearchKey.IsEmpty())
+    {
+        return nullptr;
+    }
+
+    TArray<FString> CandidatePaths;
+    if (SearchKey.StartsWith(TEXT("/")))
+    {
+        AddBlueprintCandidatePath(CandidatePaths, SearchKey);
+    }
+    else
+    {
+        AddBlueprintCandidatePath(CandidatePaths, TEXT("/Game/Blueprints/") + SearchKey);
+        AddBlueprintCandidatePath(CandidatePaths, TEXT("/Game/Widgets/") + SearchKey);
+        AddBlueprintCandidatePath(CandidatePaths, TEXT("/Game/") + SearchKey);
+    }
+
+    for (const FString& CandidatePath : CandidatePaths)
+    {
+        if (UObject* LoadedObject = UEditorAssetLibrary::LoadAsset(CandidatePath))
+        {
+            if (UBlueprint* Blueprint = ResolveBlueprintFromObject(LoadedObject))
+            {
+                return Blueprint;
+            }
+        }
+    }
+
+    const FString ShortName = SearchKey.StartsWith(TEXT("/")) ? FPackageName::GetShortName(SearchKey) : SearchKey;
+    if (ShortName.IsEmpty())
+    {
+        return nullptr;
+    }
+
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+    FARFilter Filter;
+    Filter.PackagePaths.Add(FName(TEXT("/Game")));
+    Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+    Filter.bRecursivePaths = true;
+    Filter.bRecursiveClasses = true;
+
+    TArray<FAssetData> Assets;
+    AssetRegistryModule.Get().GetAssets(Filter, Assets);
+
+    for (const FAssetData& Asset : Assets)
+    {
+        if (!Asset.AssetName.ToString().Equals(ShortName, ESearchCase::IgnoreCase))
+        {
+            continue;
+        }
+
+        const FString ObjectPath = Asset.GetObjectPathString();
+        if (UObject* LoadedObject = UEditorAssetLibrary::LoadAsset(ObjectPath))
+        {
+            if (UBlueprint* Blueprint = ResolveBlueprintFromObject(LoadedObject))
+            {
+                return Blueprint;
+            }
+        }
+
+        if (UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *ObjectPath))
+        {
+            return Blueprint;
+        }
+    }
+
+    return nullptr;
 }
 
 UEdGraph* FUnrealMCPCommonUtils::FindOrCreateEventGraph(UBlueprint* Blueprint)

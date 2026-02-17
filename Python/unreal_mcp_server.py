@@ -8,6 +8,7 @@ import logging
 import socket
 import sys
 import json
+import inspect
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
@@ -258,12 +259,15 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             _unreal_connection = None
         logger.info("Unreal MCP server shut down")
 
-# Initialize server
-mcp = FastMCP(
-    "UnrealMCP",
-    description="Unreal Engine integration via Model Context Protocol",
-    lifespan=server_lifespan
-)
+# Initialize server (FastMCP 0.x/2.x compatibility)
+_fastmcp_init_params = inspect.signature(FastMCP.__init__).parameters
+_fastmcp_kwargs = {"lifespan": server_lifespan}
+if "description" in _fastmcp_init_params:
+    _fastmcp_kwargs["description"] = "Unreal Engine integration via Model Context Protocol"
+elif "instructions" in _fastmcp_init_params:
+    _fastmcp_kwargs["instructions"] = "Unreal Engine integration via Model Context Protocol"
+
+mcp = FastMCP("UnrealMCP", **_fastmcp_kwargs)
 
 # Import and register tools
 from tools.editor_tools import register_editor_tools

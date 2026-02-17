@@ -67,6 +67,12 @@ All these capabilities are accessible through natural language commands via AI a
 - **Docs/** - Comprehensive documentation
   - See [Docs/README.md](Docs/README.md) for documentation index
 
+## 🤝 Collaboration Docs
+
+- Agent/operator rules: [AGENTS.md](AGENTS.md)
+- Work progress and roadmap: [Docs/Progress.md](Docs/Progress.md)
+- Fork maintenance and consumer sync: [Docs/ForkWorkflow.md](Docs/ForkWorkflow.md)
+
 ## 🚀 Quick Start Guide
 
 ### Prerequisites

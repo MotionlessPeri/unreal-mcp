@@ -4,5 +4,7 @@ Welcome to the documentation for the Unreal Engine Model Context Protocol (MCP) 
 
 ## Contents
 
-- [Tools](Tools/README.md) - All the tools that are available.
+1. [Tools](Tools/README.md) - Tool reference and command surface.
+2. [Progress](Progress.md) - Current implementation status and near-term roadmap.
+3. [Fork Workflow](ForkWorkflow.md) - How to maintain this fork and sync into consumer projects.
 

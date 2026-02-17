@@ -188,7 +188,8 @@ def register_umg_tools(mcp: FastMCP):
         widget_name: str,
         widget_component_name: str,
         event_name: str,
-        function_name: str = ""
+        function_name: str = "",
+        node_position = None
     ) -> Dict[str, Any]:
         """
         Bind an event on a widget component to a function.
@@ -198,6 +199,7 @@ def register_umg_tools(mcp: FastMCP):
             widget_component_name: Name of the widget component (button, etc.)
             event_name: Name of the event to bind (OnClicked, etc.)
             function_name: Name of the function to create/bind to (defaults to f"{widget_component_name}_{event_name}")
+            node_position: Optional [X, Y] position for the bound event node in EventGraph
             
         Returns:
             Dict containing success status and binding information
@@ -223,6 +225,8 @@ def register_umg_tools(mcp: FastMCP):
                 "event_name": event_name,
                 "function_name": function_name
             }
+            if node_position is not None:
+                params["node_position"] = node_position
             
             logger.info(f"Binding widget event with params: {params}")
             response = unreal.send_command("bind_widget_event", params)

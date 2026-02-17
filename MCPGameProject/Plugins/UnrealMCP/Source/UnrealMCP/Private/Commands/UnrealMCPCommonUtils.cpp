@@ -473,8 +473,13 @@ bool FUnrealMCPCommonUtils::ConnectGraphNodes(UEdGraph* Graph, UEdGraphNode* Sou
     
     if (SourcePin && TargetPin)
     {
+        if (const UEdGraphSchema* Schema = Graph->GetSchema())
+        {
+            return Schema->TryCreateConnection(SourcePin, TargetPin);
+        }
+
         SourcePin->MakeLinkTo(TargetPin);
-        return true;
+        return SourcePin->LinkedTo.Contains(TargetPin);
     }
     
     return false;
@@ -518,14 +523,14 @@ UEdGraphPin* FUnrealMCPCommonUtils::FindPin(UEdGraphNode* Node, const FString& P
         }
     }
     
-    // If we're looking for a component output and didn't find it by name, try to find the first data output pin
-    if (Direction == EGPD_Output && Cast<UK2Node_VariableGet>(Node) != nullptr)
+    // Fallback for output pins: pick the first non-exec output pin.
+    if (Direction == EGPD_Output)
     {
         for (UEdGraphPin* Pin : Node->Pins)
         {
             if (Pin->Direction == EGPD_Output && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
             {
-                UE_LOG(LogTemp, Display, TEXT("  - Found fallback data output pin: '%s'"), *Pin->PinName.ToString());
+                UE_LOG(LogTemp, Display, TEXT("  - Found fallback non-exec output pin: '%s'"), *Pin->PinName.ToString());
                 return Pin;
             }
         }

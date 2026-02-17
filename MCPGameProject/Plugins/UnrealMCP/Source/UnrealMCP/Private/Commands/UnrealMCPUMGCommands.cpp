@@ -460,14 +460,30 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleBindWidgetEvent(const TShar
 	UK2Node_ComponentBoundEvent* MutableBoundEvent = const_cast<UK2Node_ComponentBoundEvent*>(ExistingBoundEvent);
 	if (MutableBoundEvent != nullptr)
 	{
-		float MaxHeight = 0.0f;
-		for (UEdGraphNode* Node : EventGraph->Nodes)
+		FVector2D RequestedPosition(0.0f, 0.0f);
+		bool bHasRequestedPosition = false;
+		if (Params->HasField(TEXT("node_position")))
 		{
-			MaxHeight = FMath::Max(MaxHeight, static_cast<float>(Node->NodePosY));
+			RequestedPosition = FUnrealMCPCommonUtils::GetVector2DFromJson(Params, TEXT("node_position"));
+			bHasRequestedPosition = true;
 		}
 
-		MutableBoundEvent->NodePosX = 200;
-		MutableBoundEvent->NodePosY = static_cast<int32>(MaxHeight + 200.0f);
+		if (bHasRequestedPosition)
+		{
+			MutableBoundEvent->NodePosX = static_cast<int32>(RequestedPosition.X);
+			MutableBoundEvent->NodePosY = static_cast<int32>(RequestedPosition.Y);
+		}
+		else
+		{
+			float MaxHeight = 0.0f;
+			for (UEdGraphNode* Node : EventGraph->Nodes)
+			{
+				MaxHeight = FMath::Max(MaxHeight, static_cast<float>(Node->NodePosY));
+			}
+
+			MutableBoundEvent->NodePosX = 200;
+			MutableBoundEvent->NodePosY = static_cast<int32>(MaxHeight + 200.0f);
+		}
 	}
 
 	// Save the Widget Blueprint

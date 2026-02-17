@@ -10,15 +10,66 @@
 #include "K2Node_VariableGet.h"
 #include "K2Node_InputAction.h"
 #include "K2Node_Self.h"
+#include "K2Node_ComponentBoundEvent.h"
+#include "K2Node_DynamicCast.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "GameFramework/InputSettings.h"
 #include "Camera/CameraActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "EdGraphSchema_K2.h"
+#include "UObject/UObjectIterator.h"
 
 // Declare the log category
 DEFINE_LOG_CATEGORY_STATIC(LogUnrealMCP, Log, All);
+
+namespace
+{
+UClass* ResolveClassByName(const FString& InClassName)
+{
+    FString ClassName = InClassName;
+    ClassName.TrimStartAndEndInline();
+    if (ClassName.IsEmpty())
+    {
+        return nullptr;
+    }
+
+    UClass* ResolvedClass = FindObject<UClass>(ANY_PACKAGE, *ClassName);
+    if (!ResolvedClass && ClassName.StartsWith(TEXT("/Script/")))
+    {
+        ResolvedClass = LoadObject<UClass>(nullptr, *ClassName);
+    }
+    if (!ResolvedClass && !ClassName.StartsWith(TEXT("U")))
+    {
+        const FString WithUPrefix = FString(TEXT("U")) + ClassName;
+        ResolvedClass = FindObject<UClass>(ANY_PACKAGE, *WithUPrefix);
+    }
+
+    if (!ResolvedClass)
+    {
+        const FString TargetNoPrefix = ClassName.StartsWith(TEXT("U")) ? ClassName.RightChop(1) : ClassName;
+        for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+        {
+            UClass* CandidateClass = *ClassIt;
+            if (!IsValid(CandidateClass))
+            {
+                continue;
+            }
+
+            const FString CandidateName = CandidateClass->GetName();
+            const FString CandidateNoPrefix = CandidateName.StartsWith(TEXT("U")) ? CandidateName.RightChop(1) : CandidateName;
+            if (CandidateName.Equals(ClassName, ESearchCase::IgnoreCase) ||
+                CandidateNoPrefix.Equals(TargetNoPrefix, ESearchCase::IgnoreCase))
+            {
+                ResolvedClass = CandidateClass;
+                break;
+            }
+        }
+    }
+
+    return ResolvedClass;
+}
+}
 
 FUnrealMCPBlueprintNodeCommands::FUnrealMCPBlueprintNodeCommands()
 {
@@ -54,9 +105,17 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleCommand(const FSt
     {
         return HandleAddBlueprintSelfReference(Params);
     }
+    else if (CommandType == TEXT("add_blueprint_dynamic_cast_node"))
+    {
+        return HandleAddBlueprintDynamicCastNode(Params);
+    }
     else if (CommandType == TEXT("find_blueprint_nodes"))
     {
         return HandleFindBlueprintNodes(Params);
+    }
+    else if (CommandType == TEXT("clear_blueprint_event_graph"))
+    {
+        return HandleClearBlueprintEventGraph(Params);
     }
     
     return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown blueprint node command: %s"), *CommandType));
@@ -347,6 +406,38 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleAddBlueprintFunct
                 if (TargetClass)
                 {
                     UE_LOG(LogTemp, Display, TEXT("Found class using alternative name '%s'"), *ClassName);
+                    break;
+                }
+            }
+        }
+
+        // Try script path if caller passed fully qualified object path.
+        if (!TargetClass && Target.StartsWith(TEXT("/Script/")))
+        {
+            TargetClass = LoadObject<UClass>(nullptr, *Target);
+            UE_LOG(LogTemp, Display, TEXT("Tried to load class by script path '%s': %s"),
+                   *Target, TargetClass ? TEXT("Found") : TEXT("Not found"));
+        }
+
+        // Fallback: iterate loaded classes by short name.
+        if (!TargetClass)
+        {
+            const FString TargetNoPrefix = Target.StartsWith(TEXT("U")) ? Target.RightChop(1) : Target;
+            for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+            {
+                UClass* CandidateClass = *ClassIt;
+                if (!IsValid(CandidateClass))
+                {
+                    continue;
+                }
+
+                const FString CandidateName = CandidateClass->GetName();
+                const FString CandidateNoPrefix = CandidateName.StartsWith(TEXT("U")) ? CandidateName.RightChop(1) : CandidateName;
+                if (CandidateName.Equals(Target, ESearchCase::IgnoreCase) ||
+                    CandidateNoPrefix.Equals(TargetNoPrefix, ESearchCase::IgnoreCase))
+                {
+                    TargetClass = CandidateClass;
+                    UE_LOG(LogTemp, Display, TEXT("Found class by iterator fallback: %s"), *CandidateClass->GetPathName());
                     break;
                 }
             }
@@ -662,6 +753,9 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleAddBlueprintFunct
         }
     }
 
+    // Reconstruct once after parameter assignment so dependent wildcard pins update types.
+    FunctionNode->ReconstructNode();
+
     // Mark the blueprint as modified
     FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 
@@ -863,6 +957,66 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleAddBlueprintSelfR
     return ResultObj;
 }
 
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleAddBlueprintDynamicCastNode(const TSharedPtr<FJsonObject>& Params)
+{
+    FString BlueprintName;
+    if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+    }
+
+    FString TargetClassName;
+    if (!Params->TryGetStringField(TEXT("target_class"), TargetClassName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'target_class' parameter"));
+    }
+
+    FVector2D NodePosition(0.0f, 0.0f);
+    if (Params->HasField(TEXT("node_position")))
+    {
+        NodePosition = FUnrealMCPCommonUtils::GetVector2DFromJson(Params, TEXT("node_position"));
+    }
+
+    UBlueprint* Blueprint = FUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
+    if (!Blueprint)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
+    }
+
+    UEdGraph* EventGraph = FUnrealMCPCommonUtils::FindOrCreateEventGraph(Blueprint);
+    if (!EventGraph)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get event graph"));
+    }
+
+    UClass* TargetClass = ResolveClassByName(TargetClassName);
+    if (!TargetClass)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Failed to resolve target class: %s"), *TargetClassName));
+    }
+
+    UK2Node_DynamicCast* CastNode = NewObject<UK2Node_DynamicCast>(EventGraph);
+    if (!CastNode)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create dynamic cast node"));
+    }
+
+    CastNode->TargetType = TargetClass;
+    CastNode->NodePosX = NodePosition.X;
+    CastNode->NodePosY = NodePosition.Y;
+    EventGraph->AddNode(CastNode);
+    CastNode->CreateNewGuid();
+    CastNode->PostPlacedNewNode();
+    CastNode->AllocateDefaultPins();
+    CastNode->ReconstructNode();
+
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("node_id"), CastNode->NodeGuid.ToString());
+    return ResultObj;
+}
+
 TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleFindBlueprintNodes(const TSharedPtr<FJsonObject>& Params)
 {
     // Get required parameters
@@ -921,4 +1075,59 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleFindBlueprintNode
     ResultObj->SetArrayField(TEXT("node_guids"), NodeGuidArray);
     
     return ResultObj;
-} 
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleClearBlueprintEventGraph(const TSharedPtr<FJsonObject>& Params)
+{
+    FString BlueprintName;
+    if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+    }
+
+    bool bKeepBoundEvents = false;
+    if (Params->HasField(TEXT("keep_bound_events")))
+    {
+        bKeepBoundEvents = Params->GetBoolField(TEXT("keep_bound_events"));
+    }
+
+    UBlueprint* Blueprint = FUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
+    if (!Blueprint)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
+    }
+
+    UEdGraph* EventGraph = FUnrealMCPCommonUtils::FindOrCreateEventGraph(Blueprint);
+    if (!EventGraph)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get event graph"));
+    }
+
+    int32 RemovedCount = 0;
+    int32 KeptCount = 0;
+    for (int32 NodeIndex = EventGraph->Nodes.Num() - 1; NodeIndex >= 0; --NodeIndex)
+    {
+        UEdGraphNode* Node = EventGraph->Nodes[NodeIndex];
+        if (!IsValid(Node))
+        {
+            continue;
+        }
+
+        if (bKeepBoundEvents && Cast<UK2Node_ComponentBoundEvent>(Node))
+        {
+            ++KeptCount;
+            continue;
+        }
+
+        FBlueprintEditorUtils::RemoveNode(Blueprint, Node, true);
+        ++RemovedCount;
+    }
+
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+    ResultObj->SetNumberField(TEXT("removed_count"), RemovedCount);
+    ResultObj->SetNumberField(TEXT("kept_count"), KeptCount);
+    return ResultObj;
+}

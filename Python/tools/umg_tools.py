@@ -215,7 +215,10 @@ def register_umg_tools(mcp: FastMCP):
                 function_name = f"{widget_component_name}_{event_name}"
             
             params = {
-                "widget_name": widget_name,
+                # Canonical fields expected by UE command handler.
+                "blueprint_name": widget_name,
+                "widget_name": widget_component_name,
+                # Legacy field is kept for compatibility with older handlers.
                 "widget_component_name": widget_component_name,
                 "event_name": event_name,
                 "function_name": function_name

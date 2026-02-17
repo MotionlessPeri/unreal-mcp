@@ -25,6 +25,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "K2Node_Event.h"
+#include "K2Node_ComponentBoundEvent.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
@@ -348,34 +350,50 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleBindWidgetEvent(const TShar
 {
 	TSharedPtr<FJsonObject> Response = MakeShared<FJsonObject>();
 
-	// Get required parameters
+	// Support both parameter shapes:
+	// 1) New: blueprint_name + widget_name
+	// 2) Legacy python tool: widget_name(blueprint) + widget_component_name(component)
 	FString BlueprintName;
-	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	FString WidgetName;
+	Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName);
+	Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+
+	if (BlueprintName.IsEmpty())
 	{
-		Response->SetStringField(TEXT("error"), TEXT("Missing blueprint_name parameter"));
-		return Response;
+		FString LegacyBlueprintName;
+		FString LegacyWidgetComponentName;
+		if (Params->TryGetStringField(TEXT("widget_name"), LegacyBlueprintName) &&
+			Params->TryGetStringField(TEXT("widget_component_name"), LegacyWidgetComponentName))
+		{
+			BlueprintName = LegacyBlueprintName;
+			WidgetName = LegacyWidgetComponentName;
+		}
 	}
 
-	FString WidgetName;
-	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	if (BlueprintName.IsEmpty())
 	{
-		Response->SetStringField(TEXT("error"), TEXT("Missing widget_name parameter"));
-		return Response;
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			TEXT("Missing blueprint name. Use 'blueprint_name' or legacy 'widget_name'."));
+	}
+
+	if (WidgetName.IsEmpty())
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			TEXT("Missing widget component name. Use 'widget_name' or legacy 'widget_component_name'."));
 	}
 
 	FString EventName;
 	if (!Params->TryGetStringField(TEXT("event_name"), EventName))
 	{
-		Response->SetStringField(TEXT("error"), TEXT("Missing event_name parameter"));
-		return Response;
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing event_name parameter"));
 	}
 
 	// Load the Widget Blueprint by full path or short name
 	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
 	if (!WidgetBlueprint)
 	{
-		Response->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Widget Blueprint: %s"), *BlueprintName));
-		return Response;
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Failed to load Widget Blueprint: %s"), *BlueprintName));
 	}
 
 	const FString BlueprintPath = GetWidgetBlueprintSavePath(WidgetBlueprint);
@@ -384,78 +402,72 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleBindWidgetEvent(const TShar
 	UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(WidgetBlueprint);
 	if (!EventGraph)
 	{
-		Response->SetStringField(TEXT("error"), TEXT("Failed to find or create event graph"));
-		return Response;
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to find or create event graph"));
 	}
 
 	// Find the widget in the blueprint
 	UWidget* Widget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
 	if (!Widget)
 	{
-		Response->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to find widget: %s"), *WidgetName));
-		return Response;
+		return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Failed to find widget: %s"), *WidgetName));
 	}
 
-	// Create the event node (e.g., OnClicked for buttons)
-	UK2Node_Event* EventNode = nullptr;
-	
-	// Find existing nodes first
-	TArray<UK2Node_Event*> AllEventNodes;
-	FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_Event>(WidgetBlueprint, AllEventNodes);
-	
-	for (UK2Node_Event* Node : AllEventNodes)
+	const FName EventFName(*EventName);
+	const FName WidgetPropertyName(*WidgetName);
+
+	const FMulticastDelegateProperty* DelegateProperty = FindFProperty<FMulticastDelegateProperty>(Widget->GetClass(), EventFName);
+	if (DelegateProperty == nullptr)
 	{
-		if (Node->CustomFunctionName == FName(*EventName) && Node->EventReference.GetMemberParentClass() == Widget->GetClass())
-		{
-			EventNode = Node;
-			break;
-		}
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget '%s' does not expose multicast delegate '%s'."), *WidgetName, *EventName));
 	}
 
-	// If no existing node, create a new one
-	if (!EventNode)
+	FObjectProperty* ComponentProperty = nullptr;
+	if (WidgetBlueprint->SkeletonGeneratedClass != nullptr)
 	{
-		// Calculate position - place it below existing nodes
+		ComponentProperty = FindFProperty<FObjectProperty>(WidgetBlueprint->SkeletonGeneratedClass, WidgetPropertyName);
+	}
+	if (ComponentProperty == nullptr && WidgetBlueprint->GeneratedClass != nullptr)
+	{
+		ComponentProperty = FindFProperty<FObjectProperty>(WidgetBlueprint->GeneratedClass, WidgetPropertyName);
+	}
+	if (ComponentProperty == nullptr)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget component '%s' is not a blueprint variable. Enable IsVariable in designer first."), *WidgetName));
+	}
+
+	const UK2Node_ComponentBoundEvent* ExistingBoundEvent =
+		FKismetEditorUtilities::FindBoundEventForComponent(WidgetBlueprint, EventFName, WidgetPropertyName);
+
+	if (ExistingBoundEvent == nullptr)
+	{
+		FKismetEditorUtilities::CreateNewBoundEventForComponent(
+			Widget,
+			EventFName,
+			WidgetBlueprint,
+			ComponentProperty);
+
+		ExistingBoundEvent = FKismetEditorUtilities::FindBoundEventForComponent(WidgetBlueprint, EventFName, WidgetPropertyName);
+	}
+
+	if (ExistingBoundEvent == nullptr)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Failed to create bound event '%s' for widget '%s'."), *EventName, *WidgetName));
+	}
+
+	UK2Node_ComponentBoundEvent* MutableBoundEvent = const_cast<UK2Node_ComponentBoundEvent*>(ExistingBoundEvent);
+	if (MutableBoundEvent != nullptr)
+	{
 		float MaxHeight = 0.0f;
 		for (UEdGraphNode* Node : EventGraph->Nodes)
 		{
-			MaxHeight = FMath::Max(MaxHeight, Node->NodePosY);
+			MaxHeight = FMath::Max(MaxHeight, static_cast<float>(Node->NodePosY));
 		}
-		
-		const FVector2D NodePos(200, MaxHeight + 200);
 
-		// Call CreateNewBoundEventForClass, which returns void, so we can't capture the return value directly
-		// We'll need to find the node after creating it
-		FKismetEditorUtilities::CreateNewBoundEventForClass(
-			Widget->GetClass(),
-			FName(*EventName),
-			WidgetBlueprint,
-			nullptr  // We don't need a specific property binding
-		);
-
-		// Now find the newly created node
-		TArray<UK2Node_Event*> UpdatedEventNodes;
-		FBlueprintEditorUtils::GetAllNodesOfClass<UK2Node_Event>(WidgetBlueprint, UpdatedEventNodes);
-		
-		for (UK2Node_Event* Node : UpdatedEventNodes)
-		{
-			if (Node->CustomFunctionName == FName(*EventName) && Node->EventReference.GetMemberParentClass() == Widget->GetClass())
-			{
-				EventNode = Node;
-				
-				// Set position of the node
-				EventNode->NodePosX = NodePos.X;
-				EventNode->NodePosY = NodePos.Y;
-				
-				break;
-			}
-		}
-	}
-
-	if (!EventNode)
-	{
-		Response->SetStringField(TEXT("error"), TEXT("Failed to create event node"));
-		return Response;
+		MutableBoundEvent->NodePosX = 200;
+		MutableBoundEvent->NodePosY = static_cast<int32>(MaxHeight + 200.0f);
 	}
 
 	// Save the Widget Blueprint
@@ -463,7 +475,9 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleBindWidgetEvent(const TShar
 	UEditorAssetLibrary::SaveAsset(BlueprintPath, false);
 
 	Response->SetBoolField(TEXT("success"), true);
+	Response->SetStringField(TEXT("widget_name"), WidgetName);
 	Response->SetStringField(TEXT("event_name"), EventName);
+	Response->SetStringField(TEXT("node_id"), ExistingBoundEvent->NodeGuid.ToString());
 	return Response;
 }
 

@@ -1650,17 +1650,13 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleDedupeBlueprintCo
 
     if (!KeptEventNode)
     {
-        MatchedEvents.Sort([](const UK2Node_ComponentBoundEvent* A, const UK2Node_ComponentBoundEvent* B)
+        MatchedEvents.Sort([](const UK2Node_ComponentBoundEvent& A, const UK2Node_ComponentBoundEvent& B)
         {
-            if (!A || !B)
+            if (A.NodePosY == B.NodePosY)
             {
-                return A != nullptr;
+                return A.NodePosX < B.NodePosX;
             }
-            if (A->NodePosY == B->NodePosY)
-            {
-                return A->NodePosX < B->NodePosX;
-            }
-            return A->NodePosY < B->NodePosY;
+            return A.NodePosY < B.NodePosY;
         });
         KeptEventNode = MatchedEvents[0];
     }

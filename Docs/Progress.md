@@ -53,6 +53,9 @@
    - `break_blueprint_node_pin_links`
    - `clear_blueprint_event_exec_chain`
    - `dedupe_blueprint_component_bound_events`
+15. Build fix for UE pointer-array sort wrapper:
+   - fixed `dedupe_blueprint_component_bound_events` comparator signature from pointer args to reference args.
+   - resolves UE5.7 compile error in `TArray<UK2Node_ComponentBoundEvent*>::Sort` (`cannot convert argument from T to pointer`).
 
 ## In Progress
 

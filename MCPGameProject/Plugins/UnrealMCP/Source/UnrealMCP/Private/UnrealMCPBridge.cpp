@@ -252,9 +252,15 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
             }
             // Blueprint Node Commands
             else if (CommandType == TEXT("connect_blueprint_nodes") || 
+                     CommandType == TEXT("break_blueprint_node_pin_links") ||
+                     CommandType == TEXT("clear_blueprint_event_exec_chain") ||
+                     CommandType == TEXT("dedupe_blueprint_component_bound_events") ||
                      CommandType == TEXT("add_blueprint_get_self_component_reference") ||
                      CommandType == TEXT("add_blueprint_self_reference") ||
                      CommandType == TEXT("add_blueprint_dynamic_cast_node") ||
+                     CommandType == TEXT("add_blueprint_subsystem_getter_node") ||
+                     CommandType == TEXT("add_blueprint_make_struct_node") ||
+                     CommandType == TEXT("bind_blueprint_multicast_delegate") ||
                      CommandType == TEXT("find_blueprint_nodes") ||
                      CommandType == TEXT("clear_blueprint_event_graph") ||
                      CommandType == TEXT("add_blueprint_event_node") ||

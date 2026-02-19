@@ -21,6 +21,10 @@
 #include "EditorAssetLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/Level.h"
+#include "Engine/LevelScriptActor.h"
+#include "Engine/LevelScriptBlueprint.h"
+#include "Engine/World.h"
 #include "BlueprintNodeSpawner.h"
 #include "BlueprintActionDatabase.h"
 #include "Dom/JsonObject.h"
@@ -71,6 +75,33 @@ UBlueprint* ResolveBlueprintFromObject(UObject* LoadedObject)
     if (UClass* LoadedClass = Cast<UClass>(LoadedObject))
     {
         return Cast<UBlueprint>(LoadedClass->ClassGeneratedBy);
+    }
+
+    if (UWorld* LoadedWorld = Cast<UWorld>(LoadedObject))
+    {
+        if (ULevel* PersistentLevel = LoadedWorld->PersistentLevel)
+        {
+            if (ULevelScriptBlueprint* LevelScriptBlueprint = PersistentLevel->GetLevelScriptBlueprint())
+            {
+                return LevelScriptBlueprint;
+            }
+        }
+    }
+
+    if (ULevel* LoadedLevel = Cast<ULevel>(LoadedObject))
+    {
+        if (ULevelScriptBlueprint* LevelScriptBlueprint = LoadedLevel->GetLevelScriptBlueprint())
+        {
+            return LevelScriptBlueprint;
+        }
+    }
+
+    if (ALevelScriptActor* LoadedLevelScriptActor = Cast<ALevelScriptActor>(LoadedObject))
+    {
+        if (UClass* ActorClass = LoadedLevelScriptActor->GetClass())
+        {
+            return Cast<UBlueprint>(ActorClass->ClassGeneratedBy);
+        }
     }
 
     return nullptr;
@@ -220,6 +251,7 @@ UBlueprint* FUnrealMCPCommonUtils::FindBlueprintByName(const FString& BlueprintN
     {
         AddBlueprintCandidatePath(CandidatePaths, TEXT("/Game/Blueprints/") + SearchKey);
         AddBlueprintCandidatePath(CandidatePaths, TEXT("/Game/Widgets/") + SearchKey);
+        AddBlueprintCandidatePath(CandidatePaths, TEXT("/Game/Maps/") + SearchKey);
         AddBlueprintCandidatePath(CandidatePaths, TEXT("/Game/") + SearchKey);
     }
 
@@ -269,6 +301,39 @@ UBlueprint* FUnrealMCPCommonUtils::FindBlueprintByName(const FString& BlueprintN
         if (UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *ObjectPath))
         {
             return Blueprint;
+        }
+    }
+
+    FARFilter WorldFilter;
+    WorldFilter.PackagePaths.Add(FName(TEXT("/Game")));
+    WorldFilter.ClassPaths.Add(UWorld::StaticClass()->GetClassPathName());
+    WorldFilter.bRecursivePaths = true;
+    WorldFilter.bRecursiveClasses = true;
+
+    TArray<FAssetData> WorldAssets;
+    AssetRegistryModule.Get().GetAssets(WorldFilter, WorldAssets);
+    for (const FAssetData& Asset : WorldAssets)
+    {
+        if (!Asset.AssetName.ToString().Equals(ShortName, ESearchCase::IgnoreCase))
+        {
+            continue;
+        }
+
+        const FString ObjectPath = Asset.GetObjectPathString();
+        if (UObject* LoadedObject = UEditorAssetLibrary::LoadAsset(ObjectPath))
+        {
+            if (UBlueprint* Blueprint = ResolveBlueprintFromObject(LoadedObject))
+            {
+                return Blueprint;
+            }
+        }
+
+        if (UWorld* LoadedWorld = LoadObject<UWorld>(nullptr, *ObjectPath))
+        {
+            if (UBlueprint* Blueprint = ResolveBlueprintFromObject(LoadedWorld))
+            {
+                return Blueprint;
+            }
         }
     }
 

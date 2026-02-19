@@ -13,6 +13,9 @@ This fork is maintained for real consumer projects (for example: `StupidChess`).
 2. Consumer project copies plugin source from:
    - `MCPGameProject/Plugins/UnrealMCP`
 3. Python server/tooling is used from this repo directly (not copied into consumer runtime builds).
+4. Consumer repos should avoid direct edits under vendored plugin copies:
+   - implement MCP changes in this fork first
+   - then sync to consumer.
 
 ## Sync Steps (Fork -> Consumer)
 

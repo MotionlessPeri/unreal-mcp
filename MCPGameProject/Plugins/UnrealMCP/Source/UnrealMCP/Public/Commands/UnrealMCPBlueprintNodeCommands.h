@@ -24,6 +24,12 @@ private:
     TSharedPtr<FJsonObject> HandleAddBlueprintInputActionNode(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleAddBlueprintSelfReference(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleAddBlueprintDynamicCastNode(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleAddBlueprintSubsystemGetterNode(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleAddBlueprintMakeStructNode(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleBreakBlueprintNodePinLinks(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleClearBlueprintEventExecChain(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleDedupeBlueprintComponentBoundEvents(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleBindBlueprintMulticastDelegate(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleFindBlueprintNodes(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleClearBlueprintEventGraph(const TSharedPtr<FJsonObject>& Params);
 }; 

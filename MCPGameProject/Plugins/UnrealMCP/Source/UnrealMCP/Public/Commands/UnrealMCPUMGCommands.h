@@ -109,6 +109,16 @@ private:
     TSharedPtr<FJsonObject> HandleRemoveWidgetFromBlueprint(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Delete WidgetBlueprint assets under a path filtered by name prefix
+     * @param Params - Must include:
+     *                "path" - Content path (e.g. /Game/UI)
+     *                "name_prefix" - Asset name prefix filter
+     *                Optional: "recursive" (bool, default true), "dry_run" (bool, default false)
+     * @return JSON response with matched/deleted asset paths
+     */
+    TSharedPtr<FJsonObject> HandleDeleteWidgetBlueprintsByPrefix(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Add a Text Block widget to a UMG Widget Blueprint
      * @param Params - Must include:
      *                "blueprint_name" - Name of the target Widget Blueprint

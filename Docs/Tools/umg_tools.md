@@ -181,6 +181,27 @@ Response includes readback values for:
 3. `removed_total_widgets`
 4. `root` (widget tree readback)
 
+### delete_widget_blueprints_by_prefix
+
+Delete `WidgetBlueprint` assets under a content path filtered by asset name prefix.
+
+Canonical parameters:
+1. `path` (e.g. `/Game/UI`)
+2. `name_prefix`
+3. Optional `recursive` (default `true`)
+4. Optional `dry_run` (default `false`)
+
+Behavior:
+1. Command lists assets under the target path, filters by asset-name prefix, then loads and keeps only `WidgetBlueprint` assets.
+2. `dry_run=true` returns the matched set without deleting.
+3. `dry_run=false` deletes matched widget blueprint assets and returns deleted/failed lists.
+
+Response includes:
+1. `matched_count`
+2. `matched_assets`
+3. `deleted_count` / `deleted_assets` (non-dry-run)
+4. `failed_delete_count` / `failed_delete_assets` (non-dry-run)
+
 ### set_text_block_binding
 
 Create a simple text binding variable/function setup for a `TextBlock`.

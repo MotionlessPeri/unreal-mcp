@@ -746,4 +746,44 @@ def register_umg_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+    @mcp.tool()
+    def delete_widget_blueprints_by_prefix(
+        ctx: Context,
+        path: str,
+        name_prefix: str,
+        recursive: bool = True,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Delete WidgetBlueprint assets under a content path filtered by asset name prefix.
+
+        Args:
+            path: Content path (e.g. /Game/UI)
+            name_prefix: Widget Blueprint asset name prefix to match
+            recursive: Search recursively under path
+            dry_run: When true, only return matched assets without deleting
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "path": path,
+                "name_prefix": name_prefix,
+                "recursive": recursive,
+                "dry_run": dry_run,
+            }
+
+            logger.info(f"Deleting widget blueprints by prefix with params: {params}")
+            response = unreal.send_command("delete_widget_blueprints_by_prefix", params)
+            return response or {"success": False, "message": "No response from Unreal Engine"}
+        except Exception as e:
+            error_msg = f"Error deleting widget blueprints by prefix: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("UMG tools registered successfully") 

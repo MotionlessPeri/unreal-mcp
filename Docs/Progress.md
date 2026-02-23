@@ -116,6 +116,17 @@
      - remove subtree (`BtnAction`)
      - clear/rebuild root children on same probe widget
      - verify final widget tree has no duplicate hierarchy after repeat build.
+22. UMG post-Stage5 ergonomics enhancement (probe asset cleanup) completed:
+   - added `delete_widget_blueprints_by_prefix` command:
+     - filters assets under a content path by asset-name prefix
+     - keeps only `WidgetBlueprint` assets
+     - supports `dry_run` preview before deletion
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/umg_tools.py`, documented in `Docs/Tools/umg_tools.md`.
+   - added `Python/scripts/umg_bulk_cleanup_smoke.py` and validated in `StupidChessUE`:
+     - create two probe widgets with shared prefix
+     - dry-run returns both assets
+     - delete run removes both assets
+     - `get_widget_tree` fails afterward for deleted assets.
 
 ## In Progress
 
@@ -123,7 +134,7 @@
 2. Delegate binding ergonomics for large graphs (batch helper + layout utilities).
 3. Add compile-error query/read command(s) to reduce manual log scraping in consumers.
 4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation).
-5. UMG post-Stage5 ergonomics planning (bulk cleanup helpers / pattern removal / probe cleanup workflow).
+5. UMG post-Stage5 ergonomics planning (layout/template helpers and higher-level build macros).
 
 ### UMG Automation Roadmap (Decision Update, 2026-02-23)
 
@@ -180,7 +191,7 @@ Smoke Strategy (applies after each stage):
    - `dedupe_blueprint_component_bound_events`
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
-6. Evaluate targeted remove-by-pattern / bulk probe cleanup helpers after Stage 5 baseline.
+6. Evaluate whether generic asset cleanup should be promoted beyond UMG-specific cleanup (cross-tooling ergonomics).
 
 ## Validation Baseline
 

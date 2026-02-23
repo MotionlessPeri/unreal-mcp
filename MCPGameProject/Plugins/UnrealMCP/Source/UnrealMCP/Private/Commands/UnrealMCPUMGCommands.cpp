@@ -31,6 +31,7 @@
 #include "K2Node_ComponentBoundEvent.h"
 #include "UObject/UnrealType.h"
 #include "Styling/SlateColor.h"
+#include "Misc/PackageName.h"
 
 namespace
 {
@@ -429,6 +430,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("remove_widget_from_blueprint"))
 	{
 		return HandleRemoveWidgetFromBlueprint(Params);
+	}
+	else if (CommandName == TEXT("delete_widget_blueprints_by_prefix"))
+	{
+		return HandleDeleteWidgetBlueprintsByPrefix(Params);
 	}
 	else if (CommandName == TEXT("set_widget_common_properties"))
 	{
@@ -1210,6 +1215,85 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleRemoveWidgetFromBlueprint(c
 	ResultObj->SetStringField(TEXT("parent_widget_name"), ParentWidgetName);
 	ResultObj->SetNumberField(TEXT("removed_total_widgets"), RemovedTotalWidgets);
 	ResultObj->SetObjectField(TEXT("root"), BuildWidgetTreeNodeJson(WidgetBlueprint->WidgetTree->RootWidget, TEXT("")));
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleDeleteWidgetBlueprintsByPrefix(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ContentPath;
+	if (!Params->TryGetStringField(TEXT("path"), ContentPath))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'path' parameter"));
+	}
+
+	FString NamePrefix;
+	if (!Params->TryGetStringField(TEXT("name_prefix"), NamePrefix))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name_prefix' parameter"));
+	}
+
+	bool bRecursive = true;
+	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
+
+	bool bDryRun = false;
+	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+
+	TArray<FString> AssetPaths = UEditorAssetLibrary::ListAssets(ContentPath, bRecursive, false);
+	TArray<TSharedPtr<FJsonValue>> MatchedAssets;
+	TArray<TSharedPtr<FJsonValue>> DeletedAssets;
+	TArray<TSharedPtr<FJsonValue>> FailedDeletes;
+
+	for (const FString& AssetPath : AssetPaths)
+	{
+		FString PackagePath = AssetPath;
+		const int32 DotIndex = PackagePath.Find(TEXT("."), ESearchCase::CaseSensitive, ESearchDir::FromStart);
+		if (DotIndex != INDEX_NONE)
+		{
+			PackagePath = PackagePath.Left(DotIndex);
+		}
+
+		const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
+		if (!AssetName.StartsWith(NamePrefix, ESearchCase::CaseSensitive))
+		{
+			continue;
+		}
+
+		UObject* AssetObj = UEditorAssetLibrary::LoadAsset(PackagePath);
+		if (!AssetObj || !AssetObj->IsA(UWidgetBlueprint::StaticClass()))
+		{
+			continue;
+		}
+
+		MatchedAssets.Add(MakeShared<FJsonValueString>(PackagePath));
+
+		if (!bDryRun)
+		{
+			if (UEditorAssetLibrary::DeleteAsset(PackagePath))
+			{
+				DeletedAssets.Add(MakeShared<FJsonValueString>(PackagePath));
+			}
+			else
+			{
+				FailedDeletes.Add(MakeShared<FJsonValueString>(PackagePath));
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("path"), ContentPath);
+	ResultObj->SetStringField(TEXT("name_prefix"), NamePrefix);
+	ResultObj->SetBoolField(TEXT("recursive"), bRecursive);
+	ResultObj->SetBoolField(TEXT("dry_run"), bDryRun);
+	ResultObj->SetNumberField(TEXT("matched_count"), MatchedAssets.Num());
+	ResultObj->SetArrayField(TEXT("matched_assets"), MatchedAssets);
+	if (!bDryRun)
+	{
+		ResultObj->SetNumberField(TEXT("deleted_count"), DeletedAssets.Num());
+		ResultObj->SetArrayField(TEXT("deleted_assets"), DeletedAssets);
+		ResultObj->SetNumberField(TEXT("failed_delete_count"), FailedDeletes.Num());
+		ResultObj->SetArrayField(TEXT("failed_delete_assets"), FailedDeletes);
+	}
 	return ResultObj;
 }
 

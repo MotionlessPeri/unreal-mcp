@@ -13,8 +13,10 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/UniformGridPanel.h"
 #include "Components/PanelWidget.h"
 #include "Components/PanelSlot.h"
+#include "Components/UniformGridSlot.h"
 #include "JsonObjectConverter.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Components/Button.h"
@@ -97,10 +99,149 @@ TSharedPtr<FJsonObject> BuildWidgetTreeNodeJson(const UWidget* Widget, const FSt
 	return NodeObj;
 }
 
+bool TryGetJsonVector2(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FVector2D& OutValue)
+{
+	const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
+	if (!Params->TryGetArrayField(FieldName, ArrayPtr) || !ArrayPtr || ArrayPtr->Num() < 2)
+	{
+		return false;
+	}
+
+	OutValue = FVector2D((*ArrayPtr)[0]->AsNumber(), (*ArrayPtr)[1]->AsNumber());
+	return true;
+}
+
+bool TryGetJsonMargin(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FMargin& OutMargin)
+{
+	const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
+	if (!Params->TryGetArrayField(FieldName, ArrayPtr) || !ArrayPtr || ArrayPtr->Num() < 4)
+	{
+		return false;
+	}
+
+	OutMargin = FMargin(
+		(*ArrayPtr)[0]->AsNumber(),
+		(*ArrayPtr)[1]->AsNumber(),
+		(*ArrayPtr)[2]->AsNumber(),
+		(*ArrayPtr)[3]->AsNumber());
+	return true;
+}
+
+bool TryGetJsonAnchors(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FAnchors& OutAnchors)
+{
+	const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
+	if (!Params->TryGetArrayField(FieldName, ArrayPtr) || !ArrayPtr)
+	{
+		return false;
+	}
+
+	if (ArrayPtr->Num() >= 4)
+	{
+		OutAnchors = FAnchors(
+			(*ArrayPtr)[0]->AsNumber(),
+			(*ArrayPtr)[1]->AsNumber(),
+			(*ArrayPtr)[2]->AsNumber(),
+			(*ArrayPtr)[3]->AsNumber());
+		return true;
+	}
+	if (ArrayPtr->Num() >= 2)
+	{
+		const float X = (*ArrayPtr)[0]->AsNumber();
+		const float Y = (*ArrayPtr)[1]->AsNumber();
+		OutAnchors = FAnchors(X, Y, X, Y);
+		return true;
+	}
+	return false;
+}
+
+TArray<TSharedPtr<FJsonValue>> MakeJsonArrayFromVector2(const FVector2D& Value)
+{
+	return {
+		MakeShared<FJsonValueNumber>(Value.X),
+		MakeShared<FJsonValueNumber>(Value.Y)
+	};
+}
+
+TArray<TSharedPtr<FJsonValue>> MakeJsonArrayFromAnchors(const FAnchors& Anchors)
+{
+	return {
+		MakeShared<FJsonValueNumber>(Anchors.Minimum.X),
+		MakeShared<FJsonValueNumber>(Anchors.Minimum.Y),
+		MakeShared<FJsonValueNumber>(Anchors.Maximum.X),
+		MakeShared<FJsonValueNumber>(Anchors.Maximum.Y)
+	};
+}
+
+TArray<TSharedPtr<FJsonValue>> MakeJsonArrayFromMargin(const FMargin& Margin)
+{
+	return {
+		MakeShared<FJsonValueNumber>(Margin.Left),
+		MakeShared<FJsonValueNumber>(Margin.Top),
+		MakeShared<FJsonValueNumber>(Margin.Right),
+		MakeShared<FJsonValueNumber>(Margin.Bottom)
+	};
+}
+
+bool TryParseHorizontalAlignment(const FString& InValue, EHorizontalAlignment& OutValue)
+{
+	const FString Value = InValue.TrimStartAndEnd();
+	if (Value.IsEmpty())
+	{
+		return false;
+	}
+
+	if (Value.Equals(TEXT("Fill"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("HAlign_Fill"), ESearchCase::IgnoreCase))
+	{
+		OutValue = HAlign_Fill; return true;
+	}
+	if (Value.Equals(TEXT("Left"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("HAlign_Left"), ESearchCase::IgnoreCase))
+	{
+		OutValue = HAlign_Left; return true;
+	}
+	if (Value.Equals(TEXT("Center"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("HAlign_Center"), ESearchCase::IgnoreCase))
+	{
+		OutValue = HAlign_Center; return true;
+	}
+	if (Value.Equals(TEXT("Right"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("HAlign_Right"), ESearchCase::IgnoreCase))
+	{
+		OutValue = HAlign_Right; return true;
+	}
+	return false;
+}
+
+bool TryParseVerticalAlignment(const FString& InValue, EVerticalAlignment& OutValue)
+{
+	const FString Value = InValue.TrimStartAndEnd();
+	if (Value.IsEmpty())
+	{
+		return false;
+	}
+
+	if (Value.Equals(TEXT("Fill"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("VAlign_Fill"), ESearchCase::IgnoreCase))
+	{
+		OutValue = VAlign_Fill; return true;
+	}
+	if (Value.Equals(TEXT("Top"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("VAlign_Top"), ESearchCase::IgnoreCase))
+	{
+		OutValue = VAlign_Top; return true;
+	}
+	if (Value.Equals(TEXT("Center"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("VAlign_Center"), ESearchCase::IgnoreCase))
+	{
+		OutValue = VAlign_Center; return true;
+	}
+	if (Value.Equals(TEXT("Bottom"), ESearchCase::IgnoreCase) || Value.Equals(TEXT("VAlign_Bottom"), ESearchCase::IgnoreCase))
+	{
+		OutValue = VAlign_Bottom; return true;
+	}
+	return false;
+}
+
 FString NormalizeWidgetClassKey(FString WidgetClassName)
 {
 	WidgetClassName.TrimStartAndEndInline();
-	if (WidgetClassName.StartsWith(TEXT("U")))
+	if (WidgetClassName.Len() > 1 &&
+		WidgetClassName.StartsWith(TEXT("U")) &&
+		FChar::IsUpper(WidgetClassName[1]))
 	{
 		WidgetClassName.RightChopInline(1, EAllowShrinking::No);
 	}
@@ -110,6 +251,12 @@ FString NormalizeWidgetClassKey(FString WidgetClassName)
 UClass* ResolveUMGWidgetClassByName(FString WidgetClassName)
 {
 	WidgetClassName = NormalizeWidgetClassKey(WidgetClassName);
+
+	// Prefer direct class references for common widgets used by automation smokes.
+	if (WidgetClassName.Equals(TEXT("CanvasPanel"), ESearchCase::IgnoreCase)) return UCanvasPanel::StaticClass();
+	if (WidgetClassName.Equals(TEXT("UniformGridPanel"), ESearchCase::IgnoreCase)) return UUniformGridPanel::StaticClass();
+	if (WidgetClassName.Equals(TEXT("TextBlock"), ESearchCase::IgnoreCase)) return UTextBlock::StaticClass();
+	if (WidgetClassName.Equals(TEXT("Button"), ESearchCase::IgnoreCase)) return UButton::StaticClass();
 
 	static const TMap<FString, FString> ClassPathMap = {
 		{TEXT("CanvasPanel"), TEXT("/Script/UMG.CanvasPanel")},
@@ -180,6 +327,14 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("add_widget_child"))
 	{
 		return HandleAddWidgetChild(Params);
+	}
+	else if (CommandName == TEXT("set_canvas_slot_layout"))
+	{
+		return HandleSetCanvasSlotLayout(Params);
+	}
+	else if (CommandName == TEXT("set_uniform_grid_slot"))
+	{
+		return HandleSetUniformGridSlot(Params);
 	}
 	else if (CommandName == TEXT("add_widget_to_viewport"))
 	{
@@ -394,6 +549,25 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleEnsureWidgetRoot(const TSha
 			return ResultObj;
 		}
 
+		// Prefer renaming the existing root when only the name differs. Replacing a root widget
+		// can leave stale widget variable GUID metadata and triggers UMG compiler ensure paths.
+		if (bClassMatches && !bNameMatches && bReplaceExisting)
+		{
+			ExistingRoot->Modify();
+			ExistingRoot->Rename(*WidgetName, WidgetBlueprint->WidgetTree);
+			MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+			TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+			ResultObj->SetBoolField(TEXT("success"), true);
+			ResultObj->SetBoolField(TEXT("created"), false);
+			ResultObj->SetBoolField(TEXT("replaced"), false);
+			ResultObj->SetBoolField(TEXT("renamed"), true);
+			ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+			ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+			ResultObj->SetObjectField(TEXT("root"), BuildWidgetTreeNodeJson(ExistingRoot, TEXT("")));
+			return ResultObj;
+		}
+
 		if (!bReplaceExisting)
 		{
 			return FUnrealMCPCommonUtils::CreateErrorResponse(
@@ -517,6 +691,172 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChild(const TShare
 	ResultObj->SetStringField(TEXT("widget_class"), NewChild->GetClass()->GetName());
 	ResultObj->SetStringField(TEXT("slot_class"), AddedSlot->GetClass()->GetName());
 	ResultObj->SetObjectField(TEXT("widget"), BuildWidgetTreeNodeJson(NewChild, ParentWidget->GetName()));
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetCanvasSlotLayout(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	UWidget* Widget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
+	if (!Widget)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
+	if (!CanvasSlot)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget '%s' is not in a CanvasPanelSlot"), *WidgetName));
+	}
+
+	FVector2D Vec2Value;
+	if (TryGetJsonVector2(Params, TEXT("position"), Vec2Value))
+	{
+		CanvasSlot->SetPosition(Vec2Value);
+	}
+	if (TryGetJsonVector2(Params, TEXT("size"), Vec2Value))
+	{
+		CanvasSlot->SetSize(Vec2Value);
+	}
+	if (TryGetJsonVector2(Params, TEXT("alignment"), Vec2Value))
+	{
+		CanvasSlot->SetAlignment(Vec2Value);
+	}
+
+	FAnchors Anchors;
+	if (TryGetJsonAnchors(Params, TEXT("anchors"), Anchors))
+	{
+		CanvasSlot->SetAnchors(Anchors);
+	}
+
+	bool bAutoSize = false;
+	if (Params->TryGetBoolField(TEXT("auto_size"), bAutoSize))
+	{
+		CanvasSlot->SetAutoSize(bAutoSize);
+	}
+
+	int32 ZOrder = 0;
+	if (Params->TryGetNumberField(TEXT("z_order"), ZOrder))
+	{
+		CanvasSlot->SetZOrder(ZOrder);
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("widget_name"), Widget->GetName());
+	ResultObj->SetStringField(TEXT("slot_class"), CanvasSlot->GetClass()->GetName());
+	ResultObj->SetArrayField(TEXT("position"), MakeJsonArrayFromVector2(CanvasSlot->GetPosition()));
+	ResultObj->SetArrayField(TEXT("size"), MakeJsonArrayFromVector2(CanvasSlot->GetSize()));
+	ResultObj->SetArrayField(TEXT("alignment"), MakeJsonArrayFromVector2(CanvasSlot->GetAlignment()));
+	ResultObj->SetArrayField(TEXT("anchors"), MakeJsonArrayFromAnchors(CanvasSlot->GetAnchors()));
+	ResultObj->SetBoolField(TEXT("auto_size"), CanvasSlot->GetAutoSize());
+	ResultObj->SetNumberField(TEXT("z_order"), CanvasSlot->GetZOrder());
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetUniformGridSlot(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	UWidget* Widget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
+	if (!Widget)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	UUniformGridSlot* GridSlot = Cast<UUniformGridSlot>(Widget->Slot);
+	if (!GridSlot)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget '%s' is not in a UniformGridSlot"), *WidgetName));
+	}
+
+	int32 IntValue = 0;
+	if (Params->TryGetNumberField(TEXT("row"), IntValue))
+	{
+		GridSlot->SetRow(IntValue);
+	}
+	if (Params->TryGetNumberField(TEXT("column"), IntValue))
+	{
+		GridSlot->SetColumn(IntValue);
+	}
+
+	FString HorizontalAlignmentStr;
+	if (Params->TryGetStringField(TEXT("horizontal_alignment"), HorizontalAlignmentStr))
+	{
+		EHorizontalAlignment Alignment = HAlign_Fill;
+		if (!TryParseHorizontalAlignment(HorizontalAlignmentStr, Alignment))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Invalid horizontal_alignment: %s"), *HorizontalAlignmentStr));
+		}
+		GridSlot->SetHorizontalAlignment(Alignment);
+	}
+
+	FString VerticalAlignmentStr;
+	if (Params->TryGetStringField(TEXT("vertical_alignment"), VerticalAlignmentStr))
+	{
+		EVerticalAlignment Alignment = VAlign_Fill;
+		if (!TryParseVerticalAlignment(VerticalAlignmentStr, Alignment))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Invalid vertical_alignment: %s"), *VerticalAlignmentStr));
+		}
+		GridSlot->SetVerticalAlignment(Alignment);
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("widget_name"), Widget->GetName());
+	ResultObj->SetStringField(TEXT("slot_class"), GridSlot->GetClass()->GetName());
+	ResultObj->SetNumberField(TEXT("row"), GridSlot->GetRow());
+	ResultObj->SetNumberField(TEXT("column"), GridSlot->GetColumn());
+	ResultObj->SetNumberField(TEXT("horizontal_alignment"), static_cast<int32>(GridSlot->GetHorizontalAlignment()));
+	ResultObj->SetNumberField(TEXT("vertical_alignment"), static_cast<int32>(GridSlot->GetVerticalAlignment()));
 	return ResultObj;
 }
 

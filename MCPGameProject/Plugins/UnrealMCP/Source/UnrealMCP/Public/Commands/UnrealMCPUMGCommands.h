@@ -60,6 +60,24 @@ private:
     TSharedPtr<FJsonObject> HandleAddWidgetChild(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Set layout properties for a widget in a CanvasPanelSlot
+     * @param Params - Must include:
+     *                "blueprint_name", "widget_name"
+     *                Optional: "position", "size", "alignment", "anchors", "auto_size", "z_order"
+     * @return JSON response with readback slot layout values
+     */
+    TSharedPtr<FJsonObject> HandleSetCanvasSlotLayout(const TSharedPtr<FJsonObject>& Params);
+
+    /**
+     * Set layout properties for a widget in a UniformGridSlot
+     * @param Params - Must include:
+     *                "blueprint_name", "widget_name"
+     *                Optional: "row", "column", "horizontal_alignment", "vertical_alignment", "padding"
+     * @return JSON response with readback slot layout values
+     */
+    TSharedPtr<FJsonObject> HandleSetUniformGridSlot(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Add a Text Block widget to a UMG Widget Blueprint
      * @param Params - Must include:
      *                "blueprint_name" - Name of the target Widget Blueprint

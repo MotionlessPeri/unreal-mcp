@@ -485,4 +485,112 @@ def register_umg_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+    @mcp.tool()
+    def set_canvas_slot_layout(
+        ctx: Context,
+        blueprint_name: str,
+        widget_name: str,
+        position: List[float] | None = None,
+        size: List[float] | None = None,
+        alignment: List[float] | None = None,
+        anchors: List[float] | None = None,
+        auto_size: bool | None = None,
+        z_order: int | None = None
+    ) -> Dict[str, Any]:
+        """
+        Set layout properties for a widget inside a CanvasPanelSlot.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            widget_name: Target widget name (must be in a CanvasPanelSlot)
+            position: Optional [x, y]
+            size: Optional [w, h]
+            alignment: Optional [x, y]
+            anchors: Optional [min_x, min_y, max_x, max_y] (or [x, y] shorthand)
+            auto_size: Optional bool
+            z_order: Optional int
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params: Dict[str, Any] = {
+                "blueprint_name": blueprint_name,
+                "widget_name": widget_name,
+            }
+            if position is not None:
+                params["position"] = position
+            if size is not None:
+                params["size"] = size
+            if alignment is not None:
+                params["alignment"] = alignment
+            if anchors is not None:
+                params["anchors"] = anchors
+            if auto_size is not None:
+                params["auto_size"] = auto_size
+            if z_order is not None:
+                params["z_order"] = z_order
+
+            logger.info(f"Setting canvas slot layout with params: {params}")
+            response = unreal.send_command("set_canvas_slot_layout", params)
+            return response or {"success": False, "message": "No response from Unreal Engine"}
+        except Exception as e:
+            error_msg = f"Error setting canvas slot layout: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def set_uniform_grid_slot(
+        ctx: Context,
+        blueprint_name: str,
+        widget_name: str,
+        row: int | None = None,
+        column: int | None = None,
+        horizontal_alignment: str | None = None,
+        vertical_alignment: str | None = None
+    ) -> Dict[str, Any]:
+        """
+        Set layout properties for a widget inside a UniformGridSlot.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            widget_name: Target widget name (must be in a UniformGridSlot)
+            row: Optional row index
+            column: Optional column index
+            horizontal_alignment: Optional alignment string (Fill/Left/Center/Right)
+            vertical_alignment: Optional alignment string (Fill/Top/Center/Bottom)
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params: Dict[str, Any] = {
+                "blueprint_name": blueprint_name,
+                "widget_name": widget_name,
+            }
+            if row is not None:
+                params["row"] = row
+            if column is not None:
+                params["column"] = column
+            if horizontal_alignment is not None:
+                params["horizontal_alignment"] = horizontal_alignment
+            if vertical_alignment is not None:
+                params["vertical_alignment"] = vertical_alignment
+
+            logger.info(f"Setting uniform grid slot with params: {params}")
+            response = unreal.send_command("set_uniform_grid_slot", params)
+            return response or {"success": False, "message": "No response from Unreal Engine"}
+        except Exception as e:
+            error_msg = f"Error setting uniform grid slot: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("UMG tools registered successfully") 

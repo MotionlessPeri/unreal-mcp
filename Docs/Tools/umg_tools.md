@@ -54,7 +54,8 @@ Canonical parameters:
 Behavior:
 1. If root already matches class+name, returns success with `created=false`.
 2. If root mismatches and `replace_existing=false`, returns an error.
-3. If root mismatches and `replace_existing=true`, replaces the root widget.
+3. If only the root name mismatches and `replace_existing=true`, the command renames the existing root (safer than replacement for UMG metadata).
+4. If class mismatches and `replace_existing=true`, replaces the root widget.
 
 ### add_widget_child
 
@@ -70,6 +71,49 @@ Notes:
 1. Parent must be a panel widget (`UPanelWidget`).
 2. Child widget names must be unique within the widget tree.
 3. Command compiles and saves the Widget Blueprint after insertion.
+
+### set_canvas_slot_layout
+
+Set layout values for a widget hosted in a `CanvasPanelSlot`.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `widget_name`
+3. Optional `position` = `[x, y]`
+4. Optional `size` = `[w, h]`
+5. Optional `alignment` = `[x, y]`
+6. Optional `anchors` = `[min_x, min_y, max_x, max_y]` (or `[x, y]` shorthand)
+7. Optional `auto_size`
+8. Optional `z_order`
+
+Response includes readback values for:
+1. `position`
+2. `size`
+3. `alignment`
+4. `anchors`
+5. `auto_size`
+6. `z_order`
+
+### set_uniform_grid_slot
+
+Set layout values for a widget hosted in a `UniformGridSlot`.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `widget_name`
+3. Optional `row`
+4. Optional `column`
+5. Optional `horizontal_alignment` (`Fill`, `Left`, `Center`, `Right`)
+6. Optional `vertical_alignment` (`Fill`, `Top`, `Center`, `Bottom`)
+
+Response includes readback values for:
+1. `row`
+2. `column`
+3. `horizontal_alignment` (enum int)
+4. `vertical_alignment` (enum int)
+
+Compatibility note:
+1. `UUniformGridSlot` in current UE 5.7 consumer validation does not expose padding setters/getters, so padding is intentionally not part of this command.
 
 ### set_text_block_binding
 

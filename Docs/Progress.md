@@ -76,6 +76,17 @@
      - replace root with named `CanvasPanel`
      - add `VerticalBox` + `TextBlock` + `Button`
      - read back hierarchy via `get_widget_tree` successfully.
+19. UMG Route B Stage 3 (layout primitives) completed:
+   - added `set_canvas_slot_layout` (position/size/alignment/anchors/auto_size/z_order) with readback values.
+   - added `set_uniform_grid_slot` (row/column/horizontal_alignment/vertical_alignment) with readback values.
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/umg_tools.py`, documented in `Docs/Tools/umg_tools.md`.
+   - added `Python/scripts/umg_stage03_smoke.py` and validated in `StupidChessUE`:
+     - root `CanvasPanel`
+     - `UniformGridPanel` + side panel in canvas with layout set/readback
+     - `UniformGridSlot` row/column layout set/readback on child cell widget.
+   - stability fixes during validation:
+     - `NormalizeWidgetClassKey` no longer strips leading `U` from class names like `UniformGridPanel`.
+     - `ensure_widget_root` now renames same-class root instead of replacing it (avoids UMG variable GUID ensure during compile).
 
 ## In Progress
 
@@ -83,7 +94,7 @@
 2. Delegate binding ergonomics for large graphs (batch helper + layout utilities).
 3. Add compile-error query/read command(s) to reduce manual log scraping in consumers.
 4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation).
-5. Route B Stage 3 planning/implementation (layout primitives: `CanvasPanelSlot` + `UniformGridPanel` slot setters).
+5. Route B Stage 4 planning/implementation (common widget property setters for debug UIs).
 
 ### UMG Automation Roadmap (Decision Update, 2026-02-23)
 
@@ -138,6 +149,7 @@ Smoke Strategy (applies after each stage):
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
 6. Execute UMG automation roadmap Stage 0 + Stage 1 and publish smoke results.
 7. Execute UMG automation roadmap Stage 3 (layout primitives) and publish probe smoke results.
+8. Execute UMG automation roadmap Stage 4 (common widget properties) and publish probe smoke results.
 
 ## Validation Baseline
 

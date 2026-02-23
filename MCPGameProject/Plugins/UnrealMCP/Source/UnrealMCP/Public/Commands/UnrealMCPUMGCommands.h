@@ -24,10 +24,18 @@ public:
 private:
     /**
      * Create a new UMG Widget Blueprint
-     * @param Params - Must include "name" for the blueprint name
+     * @param Params - Must include "widget_name" (or legacy "name") for the blueprint name
      * @return JSON response with the created blueprint details
      */
     TSharedPtr<FJsonObject> HandleCreateUMGWidgetBlueprint(const TSharedPtr<FJsonObject>& Params);
+
+    /**
+     * Read widget hierarchy from a UMG Widget Blueprint
+     * @param Params - Must include:
+     *                "blueprint_name" - Name/path of the target Widget Blueprint
+     * @return JSON response with root widget tree and metadata
+     */
+    TSharedPtr<FJsonObject> HandleGetWidgetTree(const TSharedPtr<FJsonObject>& Params);
 
     /**
      * Add a Text Block widget to a UMG Widget Blueprint
@@ -74,8 +82,8 @@ private:
      * Set up text block binding for dynamic updates
      * @param Params - Must include:
      *                "blueprint_name" - Name of the target Widget Blueprint
-     *                "widget_name" - Name of the widget to bind
-     *                "binding_name" - Name of the binding to set up
+     *                "widget_name" (or legacy "text_block_name") - Name of the TextBlock to bind
+     *                "binding_name" (or legacy "binding_property") - Name of the binding variable to set up
      * @return JSON response with the binding details
      */
     TSharedPtr<FJsonObject> HandleSetTextBlockBinding(const TSharedPtr<FJsonObject>& Params);

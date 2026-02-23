@@ -73,7 +73,48 @@
 1. Better compile-result reliability (explicitly report asset compile errors beyond command-level success).
 2. Delegate binding ergonomics for large graphs (batch helper + layout utilities).
 3. Add compile-error query/read command(s) to reduce manual log scraping in consumers.
-4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation) [staged plan pending re-apply after workflow command commit].
+4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation).
+
+### UMG Automation Roadmap (Decision Update, 2026-02-23)
+
+Goal:
+1. Prioritize reusable UMG Designer automation capability over one-off consumer UI completion.
+2. Build capabilities in small, testable increments and validate each increment with a smoke widget.
+
+Stage 0 (Contract alignment / existing UMG commands):
+1. Align Python tool wrappers and C++ handlers for existing UMG commands.
+2. Fix parameter-name drift (`create_umg_widget_blueprint`, `set_text_block_binding`) and document canonical names.
+3. Add smoke: create a probe widget blueprint successfully with current commands.
+
+Stage 1 (Read capability first):
+1. Add `get_widget_tree` command to inspect widget hierarchy for a WidgetBlueprint.
+2. Return enough metadata for automation validation (name, type, parent/children, bindability metadata when available).
+3. Add smoke: create widget -> read tree -> verify root.
+
+Stage 2 (Generic widget creation):
+1. Add `add_widget_child` command (parent + widget class + widget name).
+2. Add `ensure_widget_root` command (stable root creation/replacement).
+3. Add smoke: auto-create panel + text + button hierarchy.
+
+Stage 3 (Layout primitives for DebugBoard):
+1. Add slot-layout setters for `CanvasPanelSlot`.
+2. Add slot-layout setters for `UniformGridPanel` (row/column, alignment).
+3. Add smoke: auto-layout a simple grid + side panel.
+
+Stage 4 (Common widget properties):
+1. Add minimal property setters for common widgets (visibility, enabled, text, color).
+2. Add focused setters for `TextBlock` and `Button` properties used by debug UIs.
+3. Add smoke: verify visible text/button panel generated end-to-end.
+
+Stage 5 (Cleanup / repeatability):
+1. Add widget-tree cleanup/removal commands to support deterministic rebuilds.
+2. Ensure scripts can be rerun without accumulating stale widgets.
+3. Add smoke: run creation script twice and confirm no duplicate hierarchy.
+
+Smoke Strategy (applies after each stage):
+1. Use a disposable probe asset (e.g. `WBP_McpUmgProbe`) in a real consumer project.
+2. Compile + save after each automation run.
+3. Validate via command response + widget tree readback + UE logs (no `AssetLog` errors).
 
 ## Next Steps
 
@@ -85,6 +126,7 @@
    - `dedupe_blueprint_component_bound_events`
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
+6. Execute UMG automation roadmap Stage 0 + Stage 1 and publish smoke results.
 
 ## Validation Baseline
 

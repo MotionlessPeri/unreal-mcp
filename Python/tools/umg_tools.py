@@ -41,7 +41,10 @@ def register_umg_tools(mcp: FastMCP):
                 return {"success": False, "message": "Failed to connect to Unreal Engine"}
             
             params = {
+                # Canonical field consumed by newer plugin versions.
                 "widget_name": widget_name,
+                # Legacy field kept for compatibility with older plugin handlers.
+                "name": widget_name,
                 "parent_class": parent_class,
                 "path": path
             }
@@ -316,7 +319,11 @@ def register_umg_tools(mcp: FastMCP):
                 return {"success": False, "message": "Failed to connect to Unreal Engine"}
             
             params = {
-                "widget_name": widget_name,
+                "blueprint_name": widget_name,
+                # Canonical fields for C++ handler
+                "widget_name": text_block_name,
+                "binding_name": binding_property,
+                # Legacy aliases kept for compatibility
                 "text_block_name": text_block_name,
                 "binding_property": binding_property,
                 "binding_type": binding_type
@@ -334,6 +341,47 @@ def register_umg_tools(mcp: FastMCP):
             
         except Exception as e:
             error_msg = f"Error setting text block binding: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def get_widget_tree(
+        ctx: Context,
+        blueprint_name: str
+    ) -> Dict[str, Any]:
+        """
+        Read the widget hierarchy of a Widget Blueprint.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+
+        Returns:
+            Dict containing root widget metadata and recursive children.
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "blueprint_name": blueprint_name,
+            }
+
+            logger.info(f"Reading widget tree with params: {params}")
+            response = unreal.send_command("get_widget_tree", params)
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"Get widget tree response: {response}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error reading widget tree: {e}"
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 

@@ -405,12 +405,14 @@ UK2Node_Event* FUnrealMCPCommonUtils::CreateEventNode(UEdGraph* Graph, const FSt
     if (EventFunction)
     {
         UClass* EventOwnerClass = EventFunction->GetOwnerClass();
+        UClass* BlueprintParentClass = Blueprint->ParentClass.Get();
+        UClass* EventClassForNode = EventOwnerClass ? EventOwnerClass : BlueprintParentClass;
         int32 NodePosY = static_cast<int32>(Position.Y);
         EventNode = FKismetEditorUtilities::AddDefaultEventNode(
             Blueprint,
             Graph,
             FName(*EventName),
-            EventOwnerClass ? EventOwnerClass : Blueprint->ParentClass,
+            EventClassForNode,
             NodePosY);
 
         if (EventNode)

@@ -3,6 +3,7 @@
 ## Last Updated
 
 1. 2026-02-19
+2. 2026-02-23
 
 ## Current Milestone
 
@@ -56,6 +57,10 @@
 15. Build fix for UE pointer-array sort wrapper:
    - fixed `dedupe_blueprint_component_bound_events` comparator signature from pointer args to reference args.
    - resolves UE5.7 compile error in `TArray<UK2Node_ComponentBoundEvent*>::Sort` (`cannot convert argument from T to pointer`).
+16. `add_blueprint_event_node` override/lifecycle event creation fix:
+   - switched event node creation from manual `NewObject<UK2Node_Event>` to `FKismetEditorUtilities::AddDefaultEventNode`.
+   - preserves required override metadata (notably `bOverrideFunction`) for lifecycle/override events such as `UUserWidget::Construct`.
+   - fixes "node looks like Event Construct but never fires at runtime" behavior observed in consumer `WBP_LocalMatchDebug`.
 
 ## In Progress
 

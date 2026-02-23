@@ -12,6 +12,9 @@ Node tools allow you to manipulate Blueprint graph nodes and connections program
 
 Add an event node to a Blueprint's event graph.
 
+Behavior note:
+- Override/lifecycle events (for example `Event Construct` in `WidgetBlueprint`) are created via Unreal's default event helper so the node carries the correct override metadata and will fire at runtime.
+
 **Parameters:**
 - `blueprint_name` (string) - Name of the target Blueprint
 - `event_type` (string) - Type of event (BeginPlay, Tick, etc.)

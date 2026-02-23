@@ -12,6 +12,7 @@
 #include "K2Node_Self.h"
 #include "EdGraphSchema_K2.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/LightComponent.h"
 #include "Components/PrimitiveComponent.h"
@@ -388,24 +389,41 @@ UK2Node_Event* FUnrealMCPCommonUtils::CreateEventNode(UEdGraph* Graph, const FSt
         }
     }
 
-    // No existing node found, create a new one
+    // No existing node found, create a new one.
+    // Use FKismetEditorUtilities::AddDefaultEventNode instead of constructing UK2Node_Event directly:
+    // some override/lifecycle events (e.g. UUserWidget::Construct) require extra metadata such as
+    // bOverrideFunction to be initialized, otherwise the node appears valid but never fires at runtime.
     UK2Node_Event* EventNode = nullptr;
-    
-    // Find the function to create the event
-    UClass* BlueprintClass = Blueprint->GeneratedClass;
-    UFunction* EventFunction = BlueprintClass->FindFunctionByName(FName(*EventName));
-    
+
+    UClass* BlueprintClass = Blueprint->GeneratedClass ? Blueprint->GeneratedClass : Blueprint->ParentClass;
+    UFunction* EventFunction = BlueprintClass ? BlueprintClass->FindFunctionByName(FName(*EventName)) : nullptr;
+    if (!EventFunction && Blueprint->ParentClass)
+    {
+        EventFunction = Blueprint->ParentClass->FindFunctionByName(FName(*EventName));
+    }
+
     if (EventFunction)
     {
-        EventNode = NewObject<UK2Node_Event>(Graph);
-        EventNode->EventReference.SetExternalMember(FName(*EventName), BlueprintClass);
-        EventNode->NodePosX = Position.X;
-        EventNode->NodePosY = Position.Y;
-        Graph->AddNode(EventNode, true);
-        EventNode->PostPlacedNewNode();
-        EventNode->AllocateDefaultPins();
-        UE_LOG(LogTemp, Display, TEXT("Created new event node with name %s (ID: %s)"), 
-            *EventName, *EventNode->NodeGuid.ToString());
+        UClass* EventOwnerClass = EventFunction->GetOwnerClass();
+        int32 NodePosY = static_cast<int32>(Position.Y);
+        EventNode = FKismetEditorUtilities::AddDefaultEventNode(
+            Blueprint,
+            Graph,
+            FName(*EventName),
+            EventOwnerClass ? EventOwnerClass : Blueprint->ParentClass,
+            NodePosY);
+
+        if (EventNode)
+        {
+            EventNode->NodePosX = static_cast<int32>(Position.X);
+            EventNode->NodePosY = static_cast<int32>(Position.Y);
+            UE_LOG(LogTemp, Display, TEXT("Created new event node with name %s (ID: %s) via AddDefaultEventNode"),
+                *EventName, *EventNode->NodeGuid.ToString());
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("AddDefaultEventNode returned null for event name: %s"), *EventName);
+        }
     }
     else
     {

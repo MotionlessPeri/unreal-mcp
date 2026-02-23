@@ -67,6 +67,15 @@
    - added `save_and_exit_editor` convenience command (save + schedule exit).
    - routed through `UnrealMCPBridge`, exposed in `Python/tools/editor_tools.py`, and documented in `Docs/Tools/editor_tools.md`.
    - consumer smoke validated against `StupidChessUE`: `save_dirty_assets` response path works and `save_and_exit_editor` returns before editor exits (delayed shutdown confirmed).
+18. UMG Route B Stage 2 (generic widget-tree creation) completed:
+   - added `ensure_widget_root` (create/reuse root widget, optional replace_existing).
+   - added `add_widget_child` (generic child insertion under `UPanelWidget` parent).
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/umg_tools.py`, documented in `Docs/Tools/umg_tools.md`.
+   - consumer smoke validated against `StupidChessUE` (`Python/scripts/umg_stage02_smoke.py`):
+     - create probe widget
+     - replace root with named `CanvasPanel`
+     - add `VerticalBox` + `TextBlock` + `Button`
+     - read back hierarchy via `get_widget_tree` successfully.
 
 ## In Progress
 
@@ -74,6 +83,7 @@
 2. Delegate binding ergonomics for large graphs (batch helper + layout utilities).
 3. Add compile-error query/read command(s) to reduce manual log scraping in consumers.
 4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation).
+5. Route B Stage 3 planning/implementation (layout primitives: `CanvasPanelSlot` + `UniformGridPanel` slot setters).
 
 ### UMG Automation Roadmap (Decision Update, 2026-02-23)
 
@@ -127,6 +137,7 @@ Smoke Strategy (applies after each stage):
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
 6. Execute UMG automation roadmap Stage 0 + Stage 1 and publish smoke results.
+7. Execute UMG automation roadmap Stage 3 (layout primitives) and publish probe smoke results.
 
 ## Validation Baseline
 

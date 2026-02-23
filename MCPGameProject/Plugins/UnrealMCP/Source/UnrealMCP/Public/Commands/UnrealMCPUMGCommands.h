@@ -38,6 +38,28 @@ private:
     TSharedPtr<FJsonObject> HandleGetWidgetTree(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Ensure a widget blueprint has a root widget (create/reuse, optional replace)
+     * @param Params - Must include:
+     *                "blueprint_name" - Name/path of the target Widget Blueprint
+     *                "widget_class" - Root widget class (e.g. CanvasPanel)
+     *                "widget_name" - Root widget instance name
+     *                Optional: "replace_existing" (bool)
+     * @return JSON response with root widget details
+     */
+    TSharedPtr<FJsonObject> HandleEnsureWidgetRoot(const TSharedPtr<FJsonObject>& Params);
+
+    /**
+     * Add a generic widget as a child of a panel widget in the widget tree
+     * @param Params - Must include:
+     *                "blueprint_name" - Name/path of the target Widget Blueprint
+     *                "parent_widget_name" - Parent panel widget name (optional if using root)
+     *                "widget_class" - Child widget class (e.g. VerticalBox, TextBlock)
+     *                "widget_name" - Child widget instance name
+     * @return JSON response with child widget and slot details
+     */
+    TSharedPtr<FJsonObject> HandleAddWidgetChild(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Add a Text Block widget to a UMG Widget Blueprint
      * @param Params - Must include:
      *                "blueprint_name" - Name of the target Widget Blueprint

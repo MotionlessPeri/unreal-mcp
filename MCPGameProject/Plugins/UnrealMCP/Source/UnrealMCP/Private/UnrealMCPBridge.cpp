@@ -282,6 +282,8 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
             // UMG Commands
             else if (CommandType == TEXT("create_umg_widget_blueprint") ||
                      CommandType == TEXT("get_widget_tree") ||
+                     CommandType == TEXT("ensure_widget_root") ||
+                     CommandType == TEXT("add_widget_child") ||
                      CommandType == TEXT("add_text_block_to_widget") ||
                      CommandType == TEXT("add_button_to_widget") ||
                      CommandType == TEXT("bind_widget_event") ||

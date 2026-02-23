@@ -385,4 +385,104 @@ def register_umg_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+    @mcp.tool()
+    def ensure_widget_root(
+        ctx: Context,
+        blueprint_name: str,
+        widget_class: str,
+        widget_name: str,
+        replace_existing: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Ensure a Widget Blueprint has a root widget of the requested type.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            widget_class: UMG widget class name (e.g. CanvasPanel, Border)
+            widget_name: Root widget instance name
+            replace_existing: Replace an existing mismatched root when true
+
+        Returns:
+            Dict containing root widget metadata and create/replace flags.
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "blueprint_name": blueprint_name,
+                "widget_class": widget_class,
+                "widget_name": widget_name,
+                "replace_existing": replace_existing,
+            }
+
+            logger.info(f"Ensuring widget root with params: {params}")
+            response = unreal.send_command("ensure_widget_root", params)
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"Ensure widget root response: {response}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error ensuring widget root: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def add_widget_child(
+        ctx: Context,
+        blueprint_name: str,
+        parent_widget_name: str,
+        widget_class: str,
+        widget_name: str
+    ) -> Dict[str, Any]:
+        """
+        Add a generic UMG widget as a child of a panel widget in a Widget Blueprint.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            parent_widget_name: Parent panel widget name (use root widget name)
+            widget_class: UMG widget class name (e.g. VerticalBox, TextBlock, Button)
+            widget_name: Child widget instance name
+
+        Returns:
+            Dict containing created child metadata and slot class.
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "blueprint_name": blueprint_name,
+                "parent_widget_name": parent_widget_name,
+                "widget_class": widget_class,
+                "widget_name": widget_name,
+            }
+
+            logger.info(f"Adding widget child with params: {params}")
+            response = unreal.send_command("add_widget_child", params)
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"Add widget child response: {response}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error adding widget child: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("UMG tools registered successfully") 

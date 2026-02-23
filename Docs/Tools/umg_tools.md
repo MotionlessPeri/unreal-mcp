@@ -41,6 +41,36 @@ Per-node fields:
 6. `is_root`
 7. `children`
 
+### ensure_widget_root
+
+Ensure the Widget Blueprint has a root widget of a requested type/name.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `widget_class` (e.g. `CanvasPanel`, `Border`)
+3. `widget_name`
+4. `replace_existing` (optional, default `false`)
+
+Behavior:
+1. If root already matches class+name, returns success with `created=false`.
+2. If root mismatches and `replace_existing=false`, returns an error.
+3. If root mismatches and `replace_existing=true`, replaces the root widget.
+
+### add_widget_child
+
+Add a generic UMG widget under a panel parent in the widget tree.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `parent_widget_name`
+3. `widget_class` (e.g. `VerticalBox`, `TextBlock`, `Button`)
+4. `widget_name`
+
+Notes:
+1. Parent must be a panel widget (`UPanelWidget`).
+2. Child widget names must be unique within the widget tree.
+3. Command compiles and saves the Widget Blueprint after insertion.
+
 ### set_text_block_binding
 
 Create a simple text binding variable/function setup for a `TextBlock`.

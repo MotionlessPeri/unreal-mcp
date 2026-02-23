@@ -96,6 +96,63 @@ TSharedPtr<FJsonObject> BuildWidgetTreeNodeJson(const UWidget* Widget, const FSt
 
 	return NodeObj;
 }
+
+FString NormalizeWidgetClassKey(FString WidgetClassName)
+{
+	WidgetClassName.TrimStartAndEndInline();
+	if (WidgetClassName.StartsWith(TEXT("U")))
+	{
+		WidgetClassName.RightChopInline(1, EAllowShrinking::No);
+	}
+	return WidgetClassName;
+}
+
+UClass* ResolveUMGWidgetClassByName(FString WidgetClassName)
+{
+	WidgetClassName = NormalizeWidgetClassKey(WidgetClassName);
+
+	static const TMap<FString, FString> ClassPathMap = {
+		{TEXT("CanvasPanel"), TEXT("/Script/UMG.CanvasPanel")},
+		{TEXT("Border"), TEXT("/Script/UMG.Border")},
+		{TEXT("VerticalBox"), TEXT("/Script/UMG.VerticalBox")},
+		{TEXT("HorizontalBox"), TEXT("/Script/UMG.HorizontalBox")},
+		{TEXT("UniformGridPanel"), TEXT("/Script/UMG.UniformGridPanel")},
+		{TEXT("GridPanel"), TEXT("/Script/UMG.GridPanel")},
+		{TEXT("Overlay"), TEXT("/Script/UMG.Overlay")},
+		{TEXT("SizeBox"), TEXT("/Script/UMG.SizeBox")},
+		{TEXT("ScrollBox"), TEXT("/Script/UMG.ScrollBox")},
+		{TEXT("TextBlock"), TEXT("/Script/UMG.TextBlock")},
+		{TEXT("Button"), TEXT("/Script/UMG.Button")},
+		{TEXT("Image"), TEXT("/Script/UMG.Image")}
+	};
+
+	const FString* ClassPath = ClassPathMap.Find(WidgetClassName);
+	if (!ClassPath)
+	{
+		return nullptr;
+	}
+
+	return StaticLoadClass(UWidget::StaticClass(), nullptr, **ClassPath);
+}
+
+void MarkCompileAndSaveWidgetBlueprint(UWidgetBlueprint* WidgetBlueprint)
+{
+	if (!WidgetBlueprint)
+	{
+		return;
+	}
+
+	WidgetBlueprint->Modify();
+	WidgetBlueprint->WidgetTree->Modify();
+	WidgetBlueprint->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBlueprint);
+
+	const FString BlueprintPath = GetWidgetBlueprintSavePath(WidgetBlueprint);
+	if (!BlueprintPath.IsEmpty())
+	{
+		UEditorAssetLibrary::SaveAsset(BlueprintPath, false);
+	}
+}
 }
 
 FUnrealMCPUMGCommands::FUnrealMCPUMGCommands()
@@ -115,6 +172,14 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("get_widget_tree"))
 	{
 		return HandleGetWidgetTree(Params);
+	}
+	else if (CommandName == TEXT("ensure_widget_root"))
+	{
+		return HandleEnsureWidgetRoot(Params);
+	}
+	else if (CommandName == TEXT("add_widget_child"))
+	{
+		return HandleAddWidgetChild(Params);
 	}
 	else if (CommandName == TEXT("add_widget_to_viewport"))
 	{
@@ -264,6 +329,194 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleGetWidgetTree(const TShared
 		ResultObj->SetObjectField(TEXT("root"), BuildWidgetTreeNodeJson(nullptr, TEXT("")));
 	}
 
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleEnsureWidgetRoot(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString WidgetClassName;
+	if (!Params->TryGetStringField(TEXT("widget_class"), WidgetClassName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_class' parameter"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found by name or path: %s"), *BlueprintName));
+	}
+	if (!WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Widget Blueprint has no WidgetTree"));
+	}
+
+	UClass* DesiredWidgetClass = ResolveUMGWidgetClassByName(WidgetClassName);
+	if (!DesiredWidgetClass || !DesiredWidgetClass->IsChildOf(UWidget::StaticClass()))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Unsupported widget_class '%s'"), *WidgetClassName));
+	}
+
+	bool bReplaceExisting = false;
+	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
+
+	UWidget* ExistingRoot = WidgetBlueprint->WidgetTree->RootWidget;
+	bool bCreated = false;
+	bool bReplaced = false;
+
+	if (ExistingRoot)
+	{
+		const bool bClassMatches = ExistingRoot->GetClass() == DesiredWidgetClass;
+		const bool bNameMatches = ExistingRoot->GetName().Equals(WidgetName, ESearchCase::CaseSensitive);
+
+		if (bClassMatches && bNameMatches)
+		{
+			TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+			ResultObj->SetBoolField(TEXT("success"), true);
+			ResultObj->SetBoolField(TEXT("created"), false);
+			ResultObj->SetBoolField(TEXT("replaced"), false);
+			ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+			ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+			ResultObj->SetObjectField(TEXT("root"), BuildWidgetTreeNodeJson(ExistingRoot, TEXT("")));
+			return ResultObj;
+		}
+
+		if (!bReplaceExisting)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Root widget already exists (%s/%s). Use replace_existing=true to replace."),
+					*ExistingRoot->GetName(), *ExistingRoot->GetClass()->GetName()));
+		}
+	}
+
+	UWidget* NewRoot = WidgetBlueprint->WidgetTree->ConstructWidget<UWidget>(DesiredWidgetClass, *WidgetName);
+	if (!NewRoot)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to construct root widget"));
+	}
+
+	WidgetBlueprint->WidgetTree->RootWidget = NewRoot;
+	bCreated = true;
+	bReplaced = ExistingRoot != nullptr;
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetBoolField(TEXT("created"), bCreated);
+	ResultObj->SetBoolField(TEXT("replaced"), bReplaced);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetObjectField(TEXT("root"), BuildWidgetTreeNodeJson(WidgetBlueprint->WidgetTree->RootWidget, TEXT("")));
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChild(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString WidgetClassName;
+	if (!Params->TryGetStringField(TEXT("widget_class"), WidgetClassName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_class' parameter"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	FString ParentWidgetName;
+	Params->TryGetStringField(TEXT("parent_widget_name"), ParentWidgetName);
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found by name or path: %s"), *BlueprintName));
+	}
+	if (!WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Widget Blueprint has no WidgetTree"));
+	}
+
+	if (WidgetBlueprint->WidgetTree->FindWidget(*WidgetName) != nullptr)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget '%s' already exists in WidgetTree"), *WidgetName));
+	}
+
+	UWidget* ParentWidget = nullptr;
+	if (ParentWidgetName.IsEmpty())
+	{
+		ParentWidget = WidgetBlueprint->WidgetTree->RootWidget;
+	}
+	else
+	{
+		ParentWidget = WidgetBlueprint->WidgetTree->FindWidget(*ParentWidgetName);
+	}
+
+	if (!ParentWidget)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Parent widget not found: %s"), ParentWidgetName.IsEmpty() ? TEXT("<root>") : *ParentWidgetName));
+	}
+
+	UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentWidget);
+	if (!ParentPanel)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Parent widget '%s' is not a panel widget"), *ParentWidget->GetName()));
+	}
+
+	UClass* ChildWidgetClass = ResolveUMGWidgetClassByName(WidgetClassName);
+	if (!ChildWidgetClass || !ChildWidgetClass->IsChildOf(UWidget::StaticClass()))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Unsupported widget_class '%s'"), *WidgetClassName));
+	}
+
+	UWidget* NewChild = WidgetBlueprint->WidgetTree->ConstructWidget<UWidget>(ChildWidgetClass, *WidgetName);
+	if (!NewChild)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to construct child widget"));
+	}
+
+	UPanelSlot* AddedSlot = ParentPanel->AddChild(NewChild);
+	if (!AddedSlot)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Failed to add child '%s' to parent '%s'"), *WidgetName, *ParentWidget->GetName()));
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetStringField(TEXT("parent_widget_name"), ParentWidget->GetName());
+	ResultObj->SetStringField(TEXT("widget_name"), NewChild->GetName());
+	ResultObj->SetStringField(TEXT("widget_class"), NewChild->GetClass()->GetName());
+	ResultObj->SetStringField(TEXT("slot_class"), AddedSlot->GetClass()->GetName());
+	ResultObj->SetObjectField(TEXT("widget"), BuildWidgetTreeNodeJson(NewChild, ParentWidget->GetName()));
 	return ResultObj;
 }
 

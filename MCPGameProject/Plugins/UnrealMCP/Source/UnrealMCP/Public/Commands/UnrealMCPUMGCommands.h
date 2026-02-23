@@ -94,6 +94,21 @@ private:
     TSharedPtr<FJsonObject> HandleSetTextBlockProperties(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Remove all direct children from a panel widget (optionally root) and their subtrees
+     * @param Params - Must include "blueprint_name"
+     *                Optional: "widget_name" (defaults to root widget)
+     * @return JSON response with removal counts and readback tree
+     */
+    TSharedPtr<FJsonObject> HandleClearWidgetChildren(const TSharedPtr<FJsonObject>& Params);
+
+    /**
+     * Remove a widget from a WidgetBlueprint widget tree (removes subtree)
+     * @param Params - Must include "blueprint_name", "widget_name"
+     * @return JSON response with removal counts and readback tree
+     */
+    TSharedPtr<FJsonObject> HandleRemoveWidgetFromBlueprint(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Add a Text Block widget to a UMG Widget Blueprint
      * @param Params - Must include:
      *                "blueprint_name" - Name of the target Widget Blueprint

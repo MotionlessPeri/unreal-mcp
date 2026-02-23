@@ -144,6 +144,43 @@ Response includes readback values for:
 1. `text`
 2. `color`
 
+### clear_widget_children
+
+Remove all direct children from a panel widget (and their subtrees).
+
+Canonical parameters:
+1. `blueprint_name`
+2. Optional `widget_name` (defaults to root widget)
+
+Behavior:
+1. Target widget must be a panel widget (`UPanelWidget`).
+2. Each direct child is removed via `WidgetTree->RemoveWidget`, so subtrees are removed too.
+3. Command compiles and saves after removal.
+
+Response includes readback values for:
+1. `removed_direct_children`
+2. `removed_total_widgets`
+3. `remaining_child_count`
+4. `root` (widget tree readback)
+
+### remove_widget_from_blueprint
+
+Remove a widget from the widget tree (removes its subtree).
+
+Canonical parameters:
+1. `blueprint_name`
+2. `widget_name`
+
+Behavior:
+1. Root widget removal is intentionally rejected (use `ensure_widget_root` or `clear_widget_children` instead).
+2. Command compiles and saves after removal.
+
+Response includes readback values for:
+1. `removed_widget_name`
+2. `parent_widget_name`
+3. `removed_total_widgets`
+4. `root` (widget tree readback)
+
 ### set_text_block_binding
 
 Create a simple text binding variable/function setup for a `TextBlock`.

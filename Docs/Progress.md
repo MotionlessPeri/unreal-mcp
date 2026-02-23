@@ -102,6 +102,20 @@
      - build `CanvasPanel -> VerticalBox -> TextBlock/Button` hierarchy
      - apply canvas slot layout and common/text properties
      - read back hierarchy and property values successfully.
+21. UMG Route B Stage 5 (cleanup / repeatability) completed:
+   - added `clear_widget_children`:
+     - clears direct children of a target panel widget (or root when omitted)
+     - removes child subtrees via `WidgetTree->RemoveWidget`
+     - returns removal counts and root readback
+   - added `remove_widget_from_blueprint`:
+     - removes a non-root widget and its subtree
+     - returns subtree removal count and root readback
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/umg_tools.py`, documented in `Docs/Tools/umg_tools.md`.
+   - added `Python/scripts/umg_stage05_smoke.py` and validated in `StupidChessUE`:
+     - build hierarchy
+     - remove subtree (`BtnAction`)
+     - clear/rebuild root children on same probe widget
+     - verify final widget tree has no duplicate hierarchy after repeat build.
 
 ## In Progress
 
@@ -109,7 +123,7 @@
 2. Delegate binding ergonomics for large graphs (batch helper + layout utilities).
 3. Add compile-error query/read command(s) to reduce manual log scraping in consumers.
 4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation).
-5. Route B Stage 5 planning/implementation (widget cleanup + repeatable rebuild commands).
+5. UMG post-Stage5 ergonomics planning (bulk cleanup helpers / pattern removal / probe cleanup workflow).
 
 ### UMG Automation Roadmap (Decision Update, 2026-02-23)
 
@@ -147,6 +161,10 @@ Stage 5 (Cleanup / repeatability):
 2. Ensure scripts can be rerun without accumulating stale widgets.
 3. Add smoke: run creation script twice and confirm no duplicate hierarchy.
 
+Stage 5 status (2026-02-24 update):
+1. `clear_widget_children` and `remove_widget_from_blueprint` implemented as the minimum cleanup set.
+2. Stage 5 smoke validates repeatable rebuild behavior by clearing/rebuilding the same hierarchy on a probe widget.
+
 Smoke Strategy (applies after each stage):
 1. Use a disposable probe asset (e.g. `WBP_McpUmgProbe`) in a real consumer project.
 2. Compile + save after each automation run.
@@ -162,7 +180,7 @@ Smoke Strategy (applies after each stage):
    - `dedupe_blueprint_component_bound_events`
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
-6. Execute UMG automation roadmap Stage 5 (cleanup / repeatability) and publish probe smoke results.
+6. Evaluate targeted remove-by-pattern / bulk probe cleanup helpers after Stage 5 baseline.
 
 ## Validation Baseline
 

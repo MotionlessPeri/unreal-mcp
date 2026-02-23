@@ -101,6 +101,25 @@ TSharedPtr<FJsonObject> BuildWidgetTreeNodeJson(const UWidget* Widget, const FSt
 	return NodeObj;
 }
 
+int32 CountWidgetSubtreeNodes(const UWidget* Widget)
+{
+	if (!Widget)
+	{
+		return 0;
+	}
+
+	int32 Count = 1;
+	if (const UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+	{
+		const int32 ChildCount = Panel->GetChildrenCount();
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+		{
+			Count += CountWidgetSubtreeNodes(Panel->GetChildAt(ChildIndex));
+		}
+	}
+	return Count;
+}
+
 bool TryGetJsonVector2(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FVector2D& OutValue)
 {
 	const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
@@ -402,6 +421,14 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("set_uniform_grid_slot"))
 	{
 		return HandleSetUniformGridSlot(Params);
+	}
+	else if (CommandName == TEXT("clear_widget_children"))
+	{
+		return HandleClearWidgetChildren(Params);
+	}
+	else if (CommandName == TEXT("remove_widget_from_blueprint"))
+	{
+		return HandleRemoveWidgetFromBlueprint(Params);
 	}
 	else if (CommandName == TEXT("set_widget_common_properties"))
 	{
@@ -1045,6 +1072,144 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetTextBlockProperties(cons
 	ResultObj->SetStringField(TEXT("widget_class"), TextBlock->GetClass()->GetName());
 	ResultObj->SetStringField(TEXT("text"), TextBlock->GetText().ToString());
 	ResultObj->SetArrayField(TEXT("color"), MakeJsonArrayFromLinearColor(ReadbackColor));
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleClearWidgetChildren(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString WidgetName;
+	Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	UWidget* TargetWidget = nullptr;
+	if (WidgetName.IsEmpty())
+	{
+		TargetWidget = WidgetBlueprint->WidgetTree->RootWidget;
+	}
+	else
+	{
+		TargetWidget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
+	}
+
+	if (!TargetWidget)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Target widget not found: %s"), WidgetName.IsEmpty() ? TEXT("<root>") : *WidgetName));
+	}
+
+	UPanelWidget* TargetPanel = Cast<UPanelWidget>(TargetWidget);
+	if (!TargetPanel)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget '%s' is not a panel widget"), *TargetWidget->GetName()));
+	}
+
+	TArray<UWidget*> ChildrenToRemove;
+	ChildrenToRemove.Reserve(TargetPanel->GetChildrenCount());
+	for (int32 ChildIndex = 0; ChildIndex < TargetPanel->GetChildrenCount(); ++ChildIndex)
+	{
+		if (UWidget* Child = TargetPanel->GetChildAt(ChildIndex))
+		{
+			ChildrenToRemove.Add(Child);
+		}
+	}
+
+	int32 RemovedDirectChildren = 0;
+	int32 RemovedTotalWidgets = 0;
+	for (UWidget* Child : ChildrenToRemove)
+	{
+		if (!Child)
+		{
+			continue;
+		}
+
+		RemovedTotalWidgets += CountWidgetSubtreeNodes(Child);
+		if (WidgetBlueprint->WidgetTree->RemoveWidget(Child))
+		{
+			++RemovedDirectChildren;
+		}
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetStringField(TEXT("target_widget_name"), TargetWidget->GetName());
+	ResultObj->SetStringField(TEXT("target_widget_class"), TargetWidget->GetClass()->GetName());
+	ResultObj->SetNumberField(TEXT("removed_direct_children"), RemovedDirectChildren);
+	ResultObj->SetNumberField(TEXT("removed_total_widgets"), RemovedTotalWidgets);
+	ResultObj->SetNumberField(TEXT("remaining_child_count"), TargetPanel->GetChildrenCount());
+	ResultObj->SetObjectField(TEXT("target_widget"), BuildWidgetTreeNodeJson(TargetWidget, TargetWidget == WidgetBlueprint->WidgetTree->RootWidget ? TEXT("") : TEXT("<parent>")));
+	ResultObj->SetObjectField(TEXT("root"), BuildWidgetTreeNodeJson(WidgetBlueprint->WidgetTree->RootWidget, TEXT("")));
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleRemoveWidgetFromBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	UWidget* TargetWidget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
+	if (!TargetWidget)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	if (TargetWidget == WidgetBlueprint->WidgetTree->RootWidget)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Removing root widget is not supported. Use ensure_widget_root/clear_widget_children instead."));
+	}
+
+	const FString ParentWidgetName = (TargetWidget->GetParent() != nullptr) ? TargetWidget->GetParent()->GetName() : FString();
+	const int32 RemovedTotalWidgets = CountWidgetSubtreeNodes(TargetWidget);
+	const bool bRemoved = WidgetBlueprint->WidgetTree->RemoveWidget(TargetWidget);
+	if (!bRemoved)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Failed to remove widget: %s"), *WidgetName));
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetStringField(TEXT("removed_widget_name"), WidgetName);
+	ResultObj->SetStringField(TEXT("parent_widget_name"), ParentWidgetName);
+	ResultObj->SetNumberField(TEXT("removed_total_widgets"), RemovedTotalWidgets);
+	ResultObj->SetObjectField(TEXT("root"), BuildWidgetTreeNodeJson(WidgetBlueprint->WidgetTree->RootWidget, TEXT("")));
 	return ResultObj;
 }
 

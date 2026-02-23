@@ -677,4 +677,73 @@ def register_umg_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+    @mcp.tool()
+    def clear_widget_children(
+        ctx: Context,
+        blueprint_name: str,
+        widget_name: str | None = None
+    ) -> Dict[str, Any]:
+        """
+        Remove all direct children from a panel widget (or root when widget_name is omitted).
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            widget_name: Optional panel widget name; defaults to root widget
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params: Dict[str, Any] = {
+                "blueprint_name": blueprint_name,
+            }
+            if widget_name:
+                params["widget_name"] = widget_name
+
+            logger.info(f"Clearing widget children with params: {params}")
+            response = unreal.send_command("clear_widget_children", params)
+            return response or {"success": False, "message": "No response from Unreal Engine"}
+        except Exception as e:
+            error_msg = f"Error clearing widget children: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def remove_widget_from_blueprint(
+        ctx: Context,
+        blueprint_name: str,
+        widget_name: str
+    ) -> Dict[str, Any]:
+        """
+        Remove a widget (and its subtree) from a Widget Blueprint widget tree.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            widget_name: Widget name to remove (root removal not supported)
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "blueprint_name": blueprint_name,
+                "widget_name": widget_name,
+            }
+
+            logger.info(f"Removing widget from blueprint with params: {params}")
+            response = unreal.send_command("remove_widget_from_blueprint", params)
+            return response or {"success": False, "message": "No response from Unreal Engine"}
+        except Exception as e:
+            error_msg = f"Error removing widget from blueprint: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("UMG tools registered successfully") 

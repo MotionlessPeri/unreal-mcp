@@ -57,6 +57,50 @@ Capture a screenshot of the viewport.
 }
 ```
 
+### save_dirty_assets
+
+Save dirty map/content packages in the current editor session.
+
+**Parameters:**
+- `save_maps` (boolean, optional) - Save dirty map packages (default: `true`)
+- `save_content` (boolean, optional) - Save dirty content packages (default: `true`)
+
+**Returns:**
+- `dirty_maps_before`, `dirty_content_before`
+- `dirty_maps_after`, `dirty_content_after`
+- `success`
+
+Notes:
+- `success=true` means the editor save operation completed without command-level failure.
+- Always inspect `dirty_*_after` counts; some dirty packages may remain (e.g. prompt-required or nonstandard save cases).
+
+### request_editor_exit
+
+Request Unreal Editor to exit asynchronously after a short delay.
+
+Why delay:
+- The command returns over MCP first, then schedules exit via ticker, so the response is less likely to be truncated by shutdown.
+
+**Parameters:**
+- `force` (boolean, optional) - Force exit (default: `false`)
+- `delay_seconds` (number, optional) - Delay before exit (default: `0.25`)
+
+### save_and_exit_editor
+
+Convenience command that runs `save_dirty_assets` and then schedules editor exit.
+
+**Parameters:**
+- `save_maps` (boolean, optional)
+- `save_content` (boolean, optional)
+- `force` (boolean, optional)
+- `delay_seconds` (number, optional; default `0.35`)
+
+**Returns:**
+- Save stats (same as `save_dirty_assets`)
+- `exit_scheduled`
+- `force`
+- `delay_seconds`
+
 ## Error Handling
 
 All command responses include a "status" field indicating whether the operation succeeded, and an optional "message" field with details in case of failure.

@@ -1,6 +1,7 @@
 #include "Commands/UnrealMCPEditorCommands.h"
 #include "Commands/UnrealMCPCommonUtils.h"
 #include "Editor.h"
+#include "FileHelpers.h"
 #include "EditorViewportClient.h"
 #include "LevelEditorViewport.h"
 #include "ImageUtils.h"
@@ -18,8 +19,68 @@
 #include "Components/StaticMeshComponent.h"
 #include "EditorSubsystem.h"
 #include "Subsystems/EditorActorSubsystem.h"
+#include "UObject/UObjectIterator.h"
+#include "Misc/PackageName.h"
+#include "Containers/Ticker.h"
+#include "HAL/PlatformMisc.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
+
+namespace
+{
+struct FDirtyPackageStats
+{
+    int32 DirtyMapPackages = 0;
+    int32 DirtyContentPackages = 0;
+};
+
+FDirtyPackageStats CollectDirtyPackageStats()
+{
+    FDirtyPackageStats Stats;
+
+    for (TObjectIterator<UPackage> It; It; ++It)
+    {
+        UPackage* Package = *It;
+        if (!Package || !Package->IsDirty())
+        {
+            continue;
+        }
+
+        const FString PackageName = Package->GetName();
+        if (PackageName.IsEmpty() || PackageName.StartsWith(TEXT("/Temp")) || PackageName.StartsWith(TEXT("/Engine/Transient")))
+        {
+            continue;
+        }
+
+        if (Package->ContainsMap())
+        {
+            ++Stats.DirtyMapPackages;
+        }
+        else
+        {
+            ++Stats.DirtyContentPackages;
+        }
+    }
+
+    return Stats;
+}
+
+void ScheduleEditorExit(const bool bForceExit, const float DelaySeconds)
+{
+    FTSTicker::GetCoreTicker().AddTicker(
+        FTickerDelegate::CreateLambda([bForceExit](float /*DeltaTime*/)
+        {
+            if (GEditor && GEditor->PlayWorld)
+            {
+                GEditor->RequestEndPlayMap();
+            }
+
+            FPlatformMisc::RequestExit(bForceExit);
+            return false;
+        }),
+        FMath::Max(0.0f, DelaySeconds));
+}
+}
 
 FUnrealMCPEditorCommands::FUnrealMCPEditorCommands()
 {
@@ -73,6 +134,18 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleCommand(const FString& C
     else if (CommandType == TEXT("take_screenshot"))
     {
         return HandleTakeScreenshot(Params);
+    }
+    else if (CommandType == TEXT("save_dirty_assets"))
+    {
+        return HandleSaveDirtyAssets(Params);
+    }
+    else if (CommandType == TEXT("request_editor_exit"))
+    {
+        return HandleRequestEditorExit(Params);
+    }
+    else if (CommandType == TEXT("save_and_exit_editor"))
+    {
+        return HandleSaveAndExitEditor(Params);
     }
     
     return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown editor command: %s"), *CommandType));
@@ -590,4 +663,67 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleTakeScreenshot(const TSh
     }
     
     return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to take screenshot"));
-} 
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleSaveDirtyAssets(const TSharedPtr<FJsonObject>& Params)
+{
+    bool bSaveMaps = true;
+    bool bSaveContent = true;
+    Params->TryGetBoolField(TEXT("save_maps"), bSaveMaps);
+    Params->TryGetBoolField(TEXT("save_content"), bSaveContent);
+
+    const FDirtyPackageStats BeforeStats = CollectDirtyPackageStats();
+    const bool bSaveResult = UEditorLoadingAndSavingUtils::SaveDirtyPackages(bSaveMaps, bSaveContent);
+    const FDirtyPackageStats AfterStats = CollectDirtyPackageStats();
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), bSaveResult);
+    ResultObj->SetBoolField(TEXT("save_maps"), bSaveMaps);
+    ResultObj->SetBoolField(TEXT("save_content"), bSaveContent);
+    ResultObj->SetNumberField(TEXT("dirty_maps_before"), BeforeStats.DirtyMapPackages);
+    ResultObj->SetNumberField(TEXT("dirty_content_before"), BeforeStats.DirtyContentPackages);
+    ResultObj->SetNumberField(TEXT("dirty_maps_after"), AfterStats.DirtyMapPackages);
+    ResultObj->SetNumberField(TEXT("dirty_content_after"), AfterStats.DirtyContentPackages);
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleRequestEditorExit(const TSharedPtr<FJsonObject>& Params)
+{
+    bool bForceExit = false;
+    Params->TryGetBoolField(TEXT("force"), bForceExit);
+
+    double DelaySeconds = 0.25;
+    Params->TryGetNumberField(TEXT("delay_seconds"), DelaySeconds);
+
+    ScheduleEditorExit(bForceExit, static_cast<float>(DelaySeconds));
+
+    TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetBoolField(TEXT("force"), bForceExit);
+    ResultObj->SetNumberField(TEXT("delay_seconds"), DelaySeconds);
+    ResultObj->SetStringField(TEXT("note"), TEXT("Editor exit has been scheduled asynchronously."));
+    return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleSaveAndExitEditor(const TSharedPtr<FJsonObject>& Params)
+{
+    // Reuse save behavior first, then schedule exit so the MCP response can flush.
+    TSharedPtr<FJsonObject> SaveResult = HandleSaveDirtyAssets(Params);
+    if (!SaveResult.IsValid())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Save step failed to produce a response"));
+    }
+
+    bool bForceExit = false;
+    Params->TryGetBoolField(TEXT("force"), bForceExit);
+
+    double DelaySeconds = 0.35;
+    Params->TryGetNumberField(TEXT("delay_seconds"), DelaySeconds);
+    ScheduleEditorExit(bForceExit, static_cast<float>(DelaySeconds));
+
+    SaveResult->SetBoolField(TEXT("exit_scheduled"), true);
+    SaveResult->SetBoolField(TEXT("force"), bForceExit);
+    SaveResult->SetNumberField(TEXT("delay_seconds"), DelaySeconds);
+    SaveResult->SetStringField(TEXT("note"), TEXT("Dirty assets saved (per requested flags) and editor exit scheduled."));
+    return SaveResult;
+}

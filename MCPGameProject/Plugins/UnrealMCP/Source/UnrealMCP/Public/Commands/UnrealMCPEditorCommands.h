@@ -31,4 +31,9 @@ private:
     // Editor viewport commands
     TSharedPtr<FJsonObject> HandleFocusViewport(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleTakeScreenshot(const TSharedPtr<FJsonObject>& Params);
+
+    // Editor lifecycle / save commands
+    TSharedPtr<FJsonObject> HandleSaveDirtyAssets(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleRequestEditorExit(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleSaveAndExitEditor(const TSharedPtr<FJsonObject>& Params);
 }; 

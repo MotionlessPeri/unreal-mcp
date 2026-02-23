@@ -61,12 +61,19 @@
    - switched event node creation from manual `NewObject<UK2Node_Event>` to `FKismetEditorUtilities::AddDefaultEventNode`.
    - preserves required override metadata (notably `bOverrideFunction`) for lifecycle/override events such as `UUserWidget::Construct`.
    - fixes "node looks like Event Construct but never fires at runtime" behavior observed in consumer `WBP_LocalMatchDebug`.
+17. Editor lifecycle automation commands (workflow efficiency):
+   - added `save_dirty_assets` (dirty map/content package save with before/after counts).
+   - added `request_editor_exit` (asynchronous delayed exit scheduling to avoid truncating MCP responses).
+   - added `save_and_exit_editor` convenience command (save + schedule exit).
+   - routed through `UnrealMCPBridge`, exposed in `Python/tools/editor_tools.py`, and documented in `Docs/Tools/editor_tools.md`.
+   - consumer smoke validated against `StupidChessUE`: `save_dirty_assets` response path works and `save_and_exit_editor` returns before editor exits (delayed shutdown confirmed).
 
 ## In Progress
 
 1. Better compile-result reliability (explicitly report asset compile errors beyond command-level success).
 2. Delegate binding ergonomics for large graphs (batch helper + layout utilities).
 3. Add compile-error query/read command(s) to reduce manual log scraping in consumers.
+4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation) [staged plan pending re-apply after workflow command commit].
 
 ## Next Steps
 
@@ -77,6 +84,7 @@
    - `clear_blueprint_event_exec_chain`
    - `dedupe_blueprint_component_bound_events`
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
+5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
 
 ## Validation Baseline
 

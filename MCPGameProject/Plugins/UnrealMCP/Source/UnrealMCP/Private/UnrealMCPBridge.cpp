@@ -234,7 +234,10 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("set_actor_property") ||
                      CommandType == TEXT("spawn_blueprint_actor") ||
                      CommandType == TEXT("focus_viewport") || 
-                     CommandType == TEXT("take_screenshot"))
+                     CommandType == TEXT("take_screenshot") ||
+                     CommandType == TEXT("save_dirty_assets") ||
+                     CommandType == TEXT("request_editor_exit") ||
+                     CommandType == TEXT("save_and_exit_editor"))
             {
                 ResultJson = EditorCommands->HandleCommand(CommandType, Params);
             }

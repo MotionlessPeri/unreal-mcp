@@ -366,4 +366,115 @@ def register_editor_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+    @mcp.tool()
+    def save_dirty_assets(
+        ctx: Context,
+        save_maps: bool = True,
+        save_content: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Save dirty map/content packages in the editor.
+
+        Args:
+            save_maps: Save dirty map packages
+            save_content: Save dirty content packages
+
+        Returns:
+            Dict with before/after dirty-package counts and save result
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            response = unreal.send_command("save_dirty_assets", {
+                "save_maps": save_maps,
+                "save_content": save_content,
+            })
+            return response or {}
+
+        except Exception as e:
+            error_msg = f"Error saving dirty assets: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def request_editor_exit(
+        ctx: Context,
+        force: bool = False,
+        delay_seconds: float = 0.25
+    ) -> Dict[str, Any]:
+        """
+        Request Unreal Editor to exit asynchronously after a short delay.
+
+        Args:
+            force: Force exit
+            delay_seconds: Delay before exit (allows MCP response to flush)
+
+        Returns:
+            Dict containing scheduling result
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            response = unreal.send_command("request_editor_exit", {
+                "force": force,
+                "delay_seconds": delay_seconds,
+            })
+            return response or {}
+
+        except Exception as e:
+            error_msg = f"Error requesting editor exit: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def save_and_exit_editor(
+        ctx: Context,
+        save_maps: bool = True,
+        save_content: bool = True,
+        force: bool = False,
+        delay_seconds: float = 0.35
+    ) -> Dict[str, Any]:
+        """
+        Save dirty packages and request Unreal Editor exit asynchronously.
+
+        Args:
+            save_maps: Save dirty map packages before exit
+            save_content: Save dirty content packages before exit
+            force: Force exit
+            delay_seconds: Delay before exit (allows MCP response to flush)
+
+        Returns:
+            Dict containing save stats and exit scheduling result
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            response = unreal.send_command("save_and_exit_editor", {
+                "save_maps": save_maps,
+                "save_content": save_content,
+                "force": force,
+                "delay_seconds": delay_seconds,
+            })
+            return response or {}
+
+        except Exception as e:
+            error_msg = f"Error saving and exiting editor: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("Editor tools registered successfully")

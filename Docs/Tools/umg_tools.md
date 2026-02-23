@@ -115,6 +115,35 @@ Response includes readback values for:
 Compatibility note:
 1. `UUniformGridSlot` in current UE 5.7 consumer validation does not expose padding setters/getters, so padding is intentionally not part of this command.
 
+### set_widget_common_properties
+
+Set common `UWidget` properties useful for debug UI automation.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `widget_name`
+3. Optional `visibility` (`Visible`, `Collapsed`, `Hidden`, `HitTestInvisible`, `SelfHitTestInvisible`)
+4. Optional `is_enabled`
+
+Response includes readback values for:
+1. `visibility` (string)
+2. `is_enabled`
+3. `is_variable`
+
+### set_text_block_properties
+
+Set common `TextBlock` properties useful for debug UI automation.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `widget_name`
+3. Optional `text`
+4. Optional `color` = `[r, g, b, a]`
+
+Response includes readback values for:
+1. `text`
+2. `color`
+
 ### set_text_block_binding
 
 Create a simple text binding variable/function setup for a `TextBlock`.

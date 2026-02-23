@@ -87,6 +87,21 @@
    - stability fixes during validation:
      - `NormalizeWidgetClassKey` no longer strips leading `U` from class names like `UniformGridPanel`.
      - `ensure_widget_root` now renames same-class root instead of replacing it (avoids UMG variable GUID ensure during compile).
+20. UMG Route B Stage 4 (common widget properties) completed:
+   - added `set_widget_common_properties` for `UWidget`-level debug UI properties:
+     - `visibility`
+     - `is_enabled`
+     - returns readback (`visibility`, `is_enabled`, `is_variable`)
+   - added `set_text_block_properties` for `UTextBlock`:
+     - `text`
+     - `color` (`[r,g,b,a]`)
+     - returns readback (`text`, `color`)
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/umg_tools.py`, documented in `Docs/Tools/umg_tools.md`.
+   - added `Python/scripts/umg_stage04_smoke.py` and validated in `StupidChessUE`:
+     - create probe widget
+     - build `CanvasPanel -> VerticalBox -> TextBlock/Button` hierarchy
+     - apply canvas slot layout and common/text properties
+     - read back hierarchy and property values successfully.
 
 ## In Progress
 
@@ -94,7 +109,7 @@
 2. Delegate binding ergonomics for large graphs (batch helper + layout utilities).
 3. Add compile-error query/read command(s) to reduce manual log scraping in consumers.
 4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation).
-5. Route B Stage 4 planning/implementation (common widget property setters for debug UIs).
+5. Route B Stage 5 planning/implementation (widget cleanup + repeatable rebuild commands).
 
 ### UMG Automation Roadmap (Decision Update, 2026-02-23)
 
@@ -147,9 +162,7 @@ Smoke Strategy (applies after each stage):
    - `dedupe_blueprint_component_bound_events`
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
-6. Execute UMG automation roadmap Stage 0 + Stage 1 and publish smoke results.
-7. Execute UMG automation roadmap Stage 3 (layout primitives) and publish probe smoke results.
-8. Execute UMG automation roadmap Stage 4 (common widget properties) and publish probe smoke results.
+6. Execute UMG automation roadmap Stage 5 (cleanup / repeatability) and publish probe smoke results.
 
 ## Validation Baseline
 

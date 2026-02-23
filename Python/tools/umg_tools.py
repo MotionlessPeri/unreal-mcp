@@ -593,4 +593,88 @@ def register_umg_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+    @mcp.tool()
+    def set_widget_common_properties(
+        ctx: Context,
+        blueprint_name: str,
+        widget_name: str,
+        visibility: str | None = None,
+        is_enabled: bool | None = None
+    ) -> Dict[str, Any]:
+        """
+        Set common UWidget properties useful for debug UI automation.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            widget_name: Target widget name
+            visibility: Optional visibility string (Visible/Collapsed/Hidden/HitTestInvisible/SelfHitTestInvisible)
+            is_enabled: Optional enabled state
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params: Dict[str, Any] = {
+                "blueprint_name": blueprint_name,
+                "widget_name": widget_name,
+            }
+            if visibility is not None:
+                params["visibility"] = visibility
+            if is_enabled is not None:
+                params["is_enabled"] = is_enabled
+
+            logger.info(f"Setting widget common properties with params: {params}")
+            response = unreal.send_command("set_widget_common_properties", params)
+            return response or {"success": False, "message": "No response from Unreal Engine"}
+        except Exception as e:
+            error_msg = f"Error setting widget common properties: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def set_text_block_properties(
+        ctx: Context,
+        blueprint_name: str,
+        widget_name: str,
+        text: str | None = None,
+        color: List[float] | None = None
+    ) -> Dict[str, Any]:
+        """
+        Set common TextBlock properties useful for debug UI automation.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            widget_name: Target TextBlock widget name
+            text: Optional text content
+            color: Optional [r, g, b, a] color array
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params: Dict[str, Any] = {
+                "blueprint_name": blueprint_name,
+                "widget_name": widget_name,
+            }
+            if text is not None:
+                params["text"] = text
+            if color is not None:
+                params["color"] = color
+
+            logger.info(f"Setting text block properties with params: {params}")
+            response = unreal.send_command("set_text_block_properties", params)
+            return response or {"success": False, "message": "No response from Unreal Engine"}
+        except Exception as e:
+            error_msg = f"Error setting text block properties: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("UMG tools registered successfully") 

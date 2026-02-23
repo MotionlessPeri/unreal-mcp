@@ -20,6 +20,7 @@
 #include "JsonObjectConverter.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Components/Button.h"
+#include "Components/Widget.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_VariableGet.h"
@@ -29,6 +30,7 @@
 #include "K2Node_Event.h"
 #include "K2Node_ComponentBoundEvent.h"
 #include "UObject/UnrealType.h"
+#include "Styling/SlateColor.h"
 
 namespace
 {
@@ -180,6 +182,71 @@ TArray<TSharedPtr<FJsonValue>> MakeJsonArrayFromMargin(const FMargin& Margin)
 		MakeShared<FJsonValueNumber>(Margin.Right),
 		MakeShared<FJsonValueNumber>(Margin.Bottom)
 	};
+}
+
+bool TryGetJsonLinearColor(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FLinearColor& OutColor)
+{
+	const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
+	if (!Params->TryGetArrayField(FieldName, ArrayPtr) || !ArrayPtr || ArrayPtr->Num() < 4)
+	{
+		return false;
+	}
+
+	OutColor = FLinearColor(
+		(*ArrayPtr)[0]->AsNumber(),
+		(*ArrayPtr)[1]->AsNumber(),
+		(*ArrayPtr)[2]->AsNumber(),
+		(*ArrayPtr)[3]->AsNumber());
+	return true;
+}
+
+TArray<TSharedPtr<FJsonValue>> MakeJsonArrayFromLinearColor(const FLinearColor& Color)
+{
+	return {
+		MakeShared<FJsonValueNumber>(Color.R),
+		MakeShared<FJsonValueNumber>(Color.G),
+		MakeShared<FJsonValueNumber>(Color.B),
+		MakeShared<FJsonValueNumber>(Color.A)
+	};
+}
+
+bool TryParseVisibility(const FString& InValue, ESlateVisibility& OutValue)
+{
+	const FString Value = InValue.TrimStartAndEnd();
+	if (Value.IsEmpty())
+	{
+		return false;
+	}
+
+	if (Value.Equals(TEXT("Visible"), ESearchCase::IgnoreCase)) { OutValue = ESlateVisibility::Visible; return true; }
+	if (Value.Equals(TEXT("Collapsed"), ESearchCase::IgnoreCase)) { OutValue = ESlateVisibility::Collapsed; return true; }
+	if (Value.Equals(TEXT("Hidden"), ESearchCase::IgnoreCase)) { OutValue = ESlateVisibility::Hidden; return true; }
+	if (Value.Equals(TEXT("HitTestInvisible"), ESearchCase::IgnoreCase) ||
+		Value.Equals(TEXT("NotHitTestableAll"), ESearchCase::IgnoreCase) ||
+		Value.Equals(TEXT("Not-Hit-Testable (Self & All Children)"), ESearchCase::IgnoreCase))
+	{
+		OutValue = ESlateVisibility::HitTestInvisible; return true;
+	}
+	if (Value.Equals(TEXT("SelfHitTestInvisible"), ESearchCase::IgnoreCase) ||
+		Value.Equals(TEXT("NotHitTestableSelf"), ESearchCase::IgnoreCase) ||
+		Value.Equals(TEXT("Not-Hit-Testable (Self Only)"), ESearchCase::IgnoreCase))
+	{
+		OutValue = ESlateVisibility::SelfHitTestInvisible; return true;
+	}
+	return false;
+}
+
+FString VisibilityToString(const ESlateVisibility Visibility)
+{
+	switch (Visibility)
+	{
+	case ESlateVisibility::Visible: return TEXT("Visible");
+	case ESlateVisibility::Collapsed: return TEXT("Collapsed");
+	case ESlateVisibility::Hidden: return TEXT("Hidden");
+	case ESlateVisibility::HitTestInvisible: return TEXT("HitTestInvisible");
+	case ESlateVisibility::SelfHitTestInvisible: return TEXT("SelfHitTestInvisible");
+	default: return TEXT("Unknown");
+	}
 }
 
 bool TryParseHorizontalAlignment(const FString& InValue, EHorizontalAlignment& OutValue)
@@ -335,6 +402,14 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("set_uniform_grid_slot"))
 	{
 		return HandleSetUniformGridSlot(Params);
+	}
+	else if (CommandName == TEXT("set_widget_common_properties"))
+	{
+		return HandleSetWidgetCommonProperties(Params);
+	}
+	else if (CommandName == TEXT("set_text_block_properties"))
+	{
+		return HandleSetTextBlockProperties(Params);
 	}
 	else if (CommandName == TEXT("add_widget_to_viewport"))
 	{
@@ -857,6 +932,119 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetUniformGridSlot(const TS
 	ResultObj->SetNumberField(TEXT("column"), GridSlot->GetColumn());
 	ResultObj->SetNumberField(TEXT("horizontal_alignment"), static_cast<int32>(GridSlot->GetHorizontalAlignment()));
 	ResultObj->SetNumberField(TEXT("vertical_alignment"), static_cast<int32>(GridSlot->GetVerticalAlignment()));
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetWidgetCommonProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	UWidget* Widget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
+	if (!Widget)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+	}
+
+	FString VisibilityStr;
+	if (Params->TryGetStringField(TEXT("visibility"), VisibilityStr))
+	{
+		ESlateVisibility ParsedVisibility = ESlateVisibility::Visible;
+		if (!TryParseVisibility(VisibilityStr, ParsedVisibility))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Invalid visibility: %s"), *VisibilityStr));
+		}
+		Widget->SetVisibility(ParsedVisibility);
+	}
+
+	bool bIsEnabled = false;
+	if (Params->TryGetBoolField(TEXT("is_enabled"), bIsEnabled))
+	{
+		Widget->SetIsEnabled(bIsEnabled);
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("widget_name"), Widget->GetName());
+	ResultObj->SetStringField(TEXT("widget_class"), Widget->GetClass()->GetName());
+	ResultObj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
+	ResultObj->SetBoolField(TEXT("is_enabled"), Widget->GetIsEnabled());
+	ResultObj->SetBoolField(TEXT("is_variable"), Widget->bIsVariable);
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetTextBlockProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'widget_name' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	UTextBlock* TextBlock = Cast<UTextBlock>(WidgetBlueprint->WidgetTree->FindWidget(*WidgetName));
+	if (!TextBlock)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("TextBlock not found: %s"), *WidgetName));
+	}
+
+	FString TextValue;
+	if (Params->TryGetStringField(TEXT("text"), TextValue))
+	{
+		TextBlock->SetText(FText::FromString(TextValue));
+	}
+
+	FLinearColor Color;
+	if (TryGetJsonLinearColor(Params, TEXT("color"), Color))
+	{
+		TextBlock->SetColorAndOpacity(FSlateColor(Color));
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	const FLinearColor ReadbackColor = TextBlock->GetColorAndOpacity().GetSpecifiedColor();
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("widget_name"), TextBlock->GetName());
+	ResultObj->SetStringField(TEXT("widget_class"), TextBlock->GetClass()->GetName());
+	ResultObj->SetStringField(TEXT("text"), TextBlock->GetText().ToString());
+	ResultObj->SetArrayField(TEXT("color"), MakeJsonArrayFromLinearColor(ReadbackColor));
 	return ResultObj;
 }
 

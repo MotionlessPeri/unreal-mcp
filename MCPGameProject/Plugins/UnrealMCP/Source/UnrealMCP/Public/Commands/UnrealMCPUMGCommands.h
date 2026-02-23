@@ -78,6 +78,22 @@ private:
     TSharedPtr<FJsonObject> HandleSetUniformGridSlot(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Set common UWidget properties useful for debug UI automation
+     * @param Params - Must include "blueprint_name", "widget_name"
+     *                Optional: "visibility", "is_enabled"
+     * @return JSON response with readback values
+     */
+    TSharedPtr<FJsonObject> HandleSetWidgetCommonProperties(const TSharedPtr<FJsonObject>& Params);
+
+    /**
+     * Set common TextBlock properties useful for debug UI automation
+     * @param Params - Must include "blueprint_name", "widget_name"
+     *                Optional: "text", "color"
+     * @return JSON response with readback values
+     */
+    TSharedPtr<FJsonObject> HandleSetTextBlockProperties(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Add a Text Block widget to a UMG Widget Blueprint
      * @param Params - Must include:
      *                "blueprint_name" - Name of the target Widget Blueprint

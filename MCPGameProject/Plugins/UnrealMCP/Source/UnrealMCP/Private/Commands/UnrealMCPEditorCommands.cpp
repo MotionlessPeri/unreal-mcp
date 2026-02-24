@@ -264,30 +264,55 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleSpawnActor(const TShared
     FActorSpawnParameters SpawnParams;
     SpawnParams.Name = *ActorName;
 
+    UClass* ActorClass = nullptr;
+
+    // First try to resolve common built-in types (backward compatibility)
     if (ActorType == TEXT("StaticMeshActor"))
     {
-        NewActor = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Location, Rotation, SpawnParams);
+        ActorClass = AStaticMeshActor::StaticClass();
     }
     else if (ActorType == TEXT("PointLight"))
     {
-        NewActor = World->SpawnActor<APointLight>(APointLight::StaticClass(), Location, Rotation, SpawnParams);
+        ActorClass = APointLight::StaticClass();
     }
     else if (ActorType == TEXT("SpotLight"))
     {
-        NewActor = World->SpawnActor<ASpotLight>(ASpotLight::StaticClass(), Location, Rotation, SpawnParams);
+        ActorClass = ASpotLight::StaticClass();
     }
     else if (ActorType == TEXT("DirectionalLight"))
     {
-        NewActor = World->SpawnActor<ADirectionalLight>(ADirectionalLight::StaticClass(), Location, Rotation, SpawnParams);
+        ActorClass = ADirectionalLight::StaticClass();
     }
     else if (ActorType == TEXT("CameraActor"))
     {
-        NewActor = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Location, Rotation, SpawnParams);
+        ActorClass = ACameraActor::StaticClass();
     }
     else
     {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown actor type: %s"), *ActorType));
+        // Try to load as a class path (e.g., "/Script/AIPoint.AIPointInstance")
+        ActorClass = FindObject<UClass>(nullptr, *ActorType);
+
+        if (!ActorClass)
+        {
+            // Try StaticLoadClass as fallback
+            ActorClass = StaticLoadClass(AActor::StaticClass(), nullptr, *ActorType);
+        }
+
+        if (!ActorClass)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Unable to find or load actor class: %s"), *ActorType));
+        }
+
+        if (!ActorClass->IsChildOf(AActor::StaticClass()))
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Class '%s' is not a valid Actor class"), *ActorType));
+        }
     }
+
+    // Spawn the actor using the resolved class
+    NewActor = World->SpawnActor(ActorClass, &Location, &Rotation, SpawnParams);
 
     if (NewActor)
     {

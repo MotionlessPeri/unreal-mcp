@@ -12,7 +12,13 @@
 
 ## Completed
 
-1. New commands for subsystem interaction and object array manipulation (2026-02-24):
+1. `spawn_actor` command enhancement (2026-02-24):
+   - extended to support arbitrary Actor classes via class path (e.g., `/Script/AIPoint.AIPointInstance`).
+   - maintains backward compatibility with built-in types (`StaticMeshActor`, `PointLight`, etc.).
+   - uses `FindObject<UClass>` and `StaticLoadClass` for dynamic class resolution.
+   - validates that loaded classes inherit from `AActor`.
+   - enables spawning custom game-specific Actor types without hardcoding.
+2. New commands for subsystem interaction and object array manipulation (2026-02-24):
    - added `call_subsystem_function` command for invoking BlueprintCallable functions on WorldSubsystems.
    - enables proper editor workflows (e.g. calling `UAIPointEditorSubsystem::CreateRouteActor` via `UAIPointWorldSubsystem::CreateRoute`).
    - supports parameter passing and return value extraction for common types (String, Int, Float, Bool, Object).

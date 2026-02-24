@@ -237,6 +237,22 @@ Smoke Strategy (applies after each stage):
 2. Compile + save after each automation run.
 3. Validate via command response + widget tree readback + UE logs (no `AssetLog` errors).
 
+Composite Smoke (Mini DebugBoard Skeleton, 2026-02-24):
+1. Added `Python/scripts/umg_mini_debugboard_skeleton_smoke.py` to exercise current Route B primitives together.
+2. Smoke builds a mini DebugBoard skeleton in a real consumer project:
+   - `RootCanvas`
+   - `BoardGrid` (`UniformGridPanel`) + batch canvas layout
+   - `SidePanel` (`VerticalBox`) + status text/buttons
+   - board sample cells with `set_uniform_grid_slot_batch`
+   - widget-tree readback validation
+3. Smoke validated end-to-end composition on consumer `StupidChessUE` using a 4x4 board sample.
+
+Known Limitation Discovered (Composite Smoke):
+1. Repeating `add_widget_child` at full-board scale (e.g. 90 single calls for a 9x10 grid) can trigger UMG GUID ensure during per-call compile/save:
+   - `Widget [Cell_*] was added but did not get a GUID`
+2. This is a tooling scalability limitation in the current per-command compile/save model, not a failure of layout/property primitives.
+3. Follow-up capability candidate: batch child creation and/or deferred compile/save mode for bulk widget-tree assembly.
+
 ## Next Steps
 
 1. Add graph layout helper command(s) for deterministic readability at scale.
@@ -249,6 +265,7 @@ Smoke Strategy (applies after each stage):
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
 6. Evaluate whether generic asset cleanup should be promoted beyond UMG-specific cleanup (cross-tooling ergonomics).
 7. Evaluate next batch helper (`set_text_block_properties_batch`) based on DebugBoard status-panel command pressure.
+8. Evaluate `add_widget_child_batch` (or deferred compile/save transaction mode) to unblock full 9x10 DebugBoard generation without GUID ensures.
 
 ## Validation Baseline
 

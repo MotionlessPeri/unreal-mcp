@@ -4,6 +4,7 @@
 
 1. 2026-02-19
 2. 2026-02-23
+3. 2026-02-24
 
 ## Current Milestone
 
@@ -11,7 +12,16 @@
 
 ## Completed
 
-1. Blueprint lookup fallback improved:
+1. New commands for subsystem interaction and object array manipulation (2026-02-24):
+   - added `call_subsystem_function` command for invoking BlueprintCallable functions on WorldSubsystems.
+   - enables proper editor workflows (e.g. calling `UAIPointEditorSubsystem::CreateRouteActor` via `UAIPointWorldSubsystem::CreateRoute`).
+   - supports parameter passing and return value extraction for common types (String, Int, Float, Bool, Object).
+   - added `add_to_actor_array_property` command for adding actor references to array properties.
+   - enables setting up actor relationships (e.g. adding `AAIPointInstance` to `AAIPointRoute::AIPoints` array).
+   - properly handles undo/redo via `Modify()` and marks packages dirty via `MarkPackageDirty()`.
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/editor_tools.py`.
+   - follows UnrealMCP code guidelines: no `Optional[T]`, detailed docstrings with examples.
+2. Blueprint lookup fallback improved:
    - supports full paths and name-based discovery without assuming `/Game/Blueprints` or `/Game/Widgets`.
 2. FastMCP constructor compatibility added for 0.x/2.x differences in server initialization.
 3. `bind_widget_event` fixed:

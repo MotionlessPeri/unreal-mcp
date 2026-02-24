@@ -36,4 +36,8 @@ private:
     TSharedPtr<FJsonObject> HandleSaveDirtyAssets(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleRequestEditorExit(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSaveAndExitEditor(const TSharedPtr<FJsonObject>& Params);
+
+    // UObject function call commands
+    TSharedPtr<FJsonObject> HandleCallSubsystemFunction(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleAddToActorArrayProperty(const TSharedPtr<FJsonObject>& Params);
 }; 

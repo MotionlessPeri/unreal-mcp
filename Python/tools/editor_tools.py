@@ -477,4 +477,142 @@ def register_editor_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+
+
+    @mcp.tool()
+    def call_subsystem_function(
+        ctx: Context,
+        subsystem_class: str,
+        function_name: str,
+        parameters: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Call a BlueprintCallable function on a WorldSubsystem.
+
+        This enables calling editor subsystem functions to properly create
+        and manage actors through the subsystem's workflow (e.g., using
+        UAIPointEditorSubsystem::CreateRouteActor).
+
+        Args:
+            ctx: The MCP context
+            subsystem_class: Full class path of the subsystem (e.g. "/Script/AIPoint.AIPointWorldSubsystem")
+            function_name: Name of the function to call (e.g. "CreateRoute")
+            parameters: Dict of parameter names and values to pass to the function
+
+        Returns:
+            Dict containing the function's return value(s) and success status
+
+        Examples:
+            # Create a new AIPointRoute through the subsystem
+            call_subsystem_function(
+                subsystem_class="/Script/AIPoint.AIPointWorldSubsystem",
+                function_name="CreateRoute",
+                parameters={"Label": "MyRoute"}
+            )
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "subsystem_class": subsystem_class,
+                "function_name": function_name
+            }
+
+            if parameters:
+                params["parameters"] = parameters
+
+            logger.info(f"Calling subsystem function '{function_name}' on '{subsystem_class}'")
+            response = unreal.send_command("call_subsystem_function", params)
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"Subsystem function call response: {response}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error calling subsystem function: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def add_to_actor_array_property(
+        ctx: Context,
+        actor_name: str,
+        property_name: str,
+        element_name: str = None,
+        element_names: List[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Add actor(s) to an array property on a target actor.
+
+        This is useful for setting up relationships between actors, such as
+        adding AIPointInstance actors to an AIPointRoute's AIPoints array.
+
+        Args:
+            ctx: The MCP context
+            actor_name: Name of the target actor to modify
+            property_name: Name of the array property (e.g. "AIPoints")
+            element_name: Name of a single actor to add to the array
+            element_names: Names of multiple actors to add to the array
+
+        Returns:
+            Dict containing success status, added count, and new array size
+
+        Examples:
+            # Add a single point to a route
+            add_to_actor_array_property(
+                actor_name="MyRoute",
+                property_name="AIPoints",
+                element_name="MyPoint1"
+            )
+
+            # Add multiple points to a route
+            add_to_actor_array_property(
+                actor_name="MyRoute",
+                property_name="AIPoints",
+                element_names=["MyPoint1", "MyPoint2", "MyPoint3"]
+            )
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "actor_name": actor_name,
+                "property_name": property_name
+            }
+
+            if element_name:
+                params["element_name"] = element_name
+            elif element_names:
+                params["element_names"] = element_names
+            else:
+                return {"success": False, "message": "Must provide either element_name or element_names"}
+
+            logger.info(f"Adding element(s) to array property '{property_name}' on actor '{actor_name}'")
+            response = unreal.send_command("add_to_actor_array_property", params)
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"Array property update response: {response}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error adding to actor array property: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("Editor tools registered successfully")

@@ -72,6 +72,25 @@ Notes:
 2. Child widget names must be unique within the widget tree.
 3. Command compiles and saves the Widget Blueprint after insertion.
 
+### add_widget_child_batch
+
+Batch-add generic UMG widgets under panel parents in the widget tree.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `items` (array of objects)
+   - each item must include `widget_class`, `widget_name`
+   - each item may include `parent_widget_name` (defaults to root widget)
+
+Behavior:
+1. Applies the same validation semantics as `add_widget_child` for each item.
+2. Fails the command if any item is invalid (missing parent, duplicate widget name, unsupported class, etc.).
+3. Compiles and saves the widget blueprint once after all insertions.
+
+Response includes:
+1. `created_count`
+2. `results` (per-item metadata: `parent_widget_name`, `widget_name`, `widget_class`, `slot_class`, `widget`)
+
 ### set_canvas_slot_layout
 
 Set layout values for a widget hosted in a `CanvasPanelSlot`.

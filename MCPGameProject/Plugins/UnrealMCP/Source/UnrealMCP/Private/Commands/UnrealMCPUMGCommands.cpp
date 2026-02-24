@@ -121,6 +121,78 @@ int32 CountWidgetSubtreeNodes(const UWidget* Widget)
 	return Count;
 }
 
+void CollectWidgetSubtreeNames(const UWidget* Widget, TArray<FName>& OutNames)
+{
+	if (!Widget)
+	{
+		return;
+	}
+
+	OutNames.Add(Widget->GetFName());
+	if (const UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+	{
+		const int32 ChildCount = Panel->GetChildrenCount();
+		for (int32 ChildIndex = 0; ChildIndex < ChildCount; ++ChildIndex)
+		{
+			CollectWidgetSubtreeNames(Panel->GetChildAt(ChildIndex), OutNames);
+		}
+	}
+}
+
+void EnsureWidgetVariableGuid(UWidgetBlueprint* WidgetBlueprint, const UWidget* Widget)
+{
+	if (!WidgetBlueprint || !Widget)
+	{
+		return;
+	}
+
+	const FName WidgetName = Widget->GetFName();
+	if (!WidgetBlueprint->WidgetVariableNameToGuidMap.Contains(WidgetName))
+	{
+		WidgetBlueprint->Modify();
+		WidgetBlueprint->WidgetVariableNameToGuidMap.Emplace(WidgetName, FGuid::NewDeterministicGuid(Widget->GetPathName()));
+	}
+}
+
+void RenameWidgetVariableGuid(UWidgetBlueprint* WidgetBlueprint, const FName OldName, const FName NewName, const UWidget* WidgetForFallbackGuid)
+{
+	if (!WidgetBlueprint || OldName == NewName)
+	{
+		return;
+	}
+
+	FGuid ExistingGuid;
+	if (WidgetBlueprint->WidgetVariableNameToGuidMap.RemoveAndCopyValue(OldName, ExistingGuid))
+	{
+		WidgetBlueprint->Modify();
+		WidgetBlueprint->WidgetVariableNameToGuidMap.Add(NewName, ExistingGuid);
+		return;
+	}
+
+	if (WidgetForFallbackGuid)
+	{
+		EnsureWidgetVariableGuid(WidgetBlueprint, WidgetForFallbackGuid);
+	}
+	else if (!WidgetBlueprint->WidgetVariableNameToGuidMap.Contains(NewName))
+	{
+		WidgetBlueprint->Modify();
+		WidgetBlueprint->WidgetVariableNameToGuidMap.Add(NewName, FGuid::NewGuid());
+	}
+}
+
+void RemoveWidgetVariableGuid(UWidgetBlueprint* WidgetBlueprint, const FName WidgetName)
+{
+	if (!WidgetBlueprint)
+	{
+		return;
+	}
+
+	if (WidgetBlueprint->WidgetVariableNameToGuidMap.Remove(WidgetName) > 0)
+	{
+		WidgetBlueprint->Modify();
+	}
+}
+
 bool TryGetJsonVector2(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FVector2D& OutValue)
 {
 	const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
@@ -550,6 +622,80 @@ void MarkCompileAndSaveWidgetBlueprint(UWidgetBlueprint* WidgetBlueprint)
 		UEditorAssetLibrary::SaveAsset(BlueprintPath, false);
 	}
 }
+
+bool AddWidgetChildInternal(
+	UWidgetBlueprint* WidgetBlueprint,
+	const FString& ParentWidgetName,
+	const FString& WidgetClassName,
+	const FString& WidgetName,
+	UWidget*& OutParentWidget,
+	UWidget*& OutNewChild,
+	UPanelSlot*& OutAddedSlot,
+	FString& OutError)
+{
+	OutParentWidget = nullptr;
+	OutNewChild = nullptr;
+	OutAddedSlot = nullptr;
+
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		OutError = TEXT("Widget Blueprint has no WidgetTree");
+		return false;
+	}
+
+	if (WidgetBlueprint->WidgetTree->FindWidget(*WidgetName) != nullptr)
+	{
+		OutError = FString::Printf(TEXT("Widget '%s' already exists in WidgetTree"), *WidgetName);
+		return false;
+	}
+
+	if (ParentWidgetName.IsEmpty())
+	{
+		OutParentWidget = WidgetBlueprint->WidgetTree->RootWidget;
+	}
+	else
+	{
+		OutParentWidget = WidgetBlueprint->WidgetTree->FindWidget(*ParentWidgetName);
+	}
+
+	if (!OutParentWidget)
+	{
+		OutError = FString::Printf(TEXT("Parent widget not found: %s"), ParentWidgetName.IsEmpty() ? TEXT("<root>") : *ParentWidgetName);
+		return false;
+	}
+
+	UPanelWidget* ParentPanel = Cast<UPanelWidget>(OutParentWidget);
+	if (!ParentPanel)
+	{
+		OutError = FString::Printf(TEXT("Parent widget '%s' is not a panel widget"), *OutParentWidget->GetName());
+		return false;
+	}
+
+	UClass* ChildWidgetClass = ResolveUMGWidgetClassByName(WidgetClassName);
+	if (!ChildWidgetClass || !ChildWidgetClass->IsChildOf(UWidget::StaticClass()))
+	{
+		OutError = FString::Printf(TEXT("Unsupported widget_class '%s'"), *WidgetClassName);
+		return false;
+	}
+
+	OutNewChild = WidgetBlueprint->WidgetTree->ConstructWidget<UWidget>(ChildWidgetClass, *WidgetName);
+	if (!OutNewChild)
+	{
+		OutError = TEXT("Failed to construct child widget");
+		return false;
+	}
+
+	OutAddedSlot = ParentPanel->AddChild(OutNewChild);
+	if (!OutAddedSlot)
+	{
+		OutError = FString::Printf(TEXT("Failed to add child '%s' to parent '%s'"), *WidgetName, *OutParentWidget->GetName());
+		return false;
+	}
+
+	EnsureWidgetVariableGuid(WidgetBlueprint, OutNewChild);
+
+	return true;
+}
 }
 
 FUnrealMCPUMGCommands::FUnrealMCPUMGCommands()
@@ -577,6 +723,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("add_widget_child"))
 	{
 		return HandleAddWidgetChild(Params);
+	}
+	else if (CommandName == TEXT("add_widget_child_batch"))
+	{
+		return HandleAddWidgetChildBatch(Params);
 	}
 	else if (CommandName == TEXT("set_canvas_slot_layout"))
 	{
@@ -835,8 +985,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleEnsureWidgetRoot(const TSha
 		// can leave stale widget variable GUID metadata and triggers UMG compiler ensure paths.
 		if (bClassMatches && !bNameMatches && bReplaceExisting)
 		{
+			const FName OldName = ExistingRoot->GetFName();
 			ExistingRoot->Modify();
 			ExistingRoot->Rename(*WidgetName, WidgetBlueprint->WidgetTree);
+			RenameWidgetVariableGuid(WidgetBlueprint, OldName, ExistingRoot->GetFName(), ExistingRoot);
 			MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
 
 			TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
@@ -864,7 +1016,12 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleEnsureWidgetRoot(const TSha
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to construct root widget"));
 	}
 
+	if (ExistingRoot && ExistingRoot != NewRoot)
+	{
+		RemoveWidgetVariableGuid(WidgetBlueprint, ExistingRoot->GetFName());
+	}
 	WidgetBlueprint->WidgetTree->RootWidget = NewRoot;
+	EnsureWidgetVariableGuid(WidgetBlueprint, NewRoot);
 	bCreated = true;
 	bReplaced = ExistingRoot != nullptr;
 	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
@@ -913,53 +1070,13 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChild(const TShare
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Widget Blueprint has no WidgetTree"));
 	}
 
-	if (WidgetBlueprint->WidgetTree->FindWidget(*WidgetName) != nullptr)
-	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("Widget '%s' already exists in WidgetTree"), *WidgetName));
-	}
-
 	UWidget* ParentWidget = nullptr;
-	if (ParentWidgetName.IsEmpty())
+	UWidget* NewChild = nullptr;
+	UPanelSlot* AddedSlot = nullptr;
+	FString AddError;
+	if (!AddWidgetChildInternal(WidgetBlueprint, ParentWidgetName, WidgetClassName, WidgetName, ParentWidget, NewChild, AddedSlot, AddError))
 	{
-		ParentWidget = WidgetBlueprint->WidgetTree->RootWidget;
-	}
-	else
-	{
-		ParentWidget = WidgetBlueprint->WidgetTree->FindWidget(*ParentWidgetName);
-	}
-
-	if (!ParentWidget)
-	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("Parent widget not found: %s"), ParentWidgetName.IsEmpty() ? TEXT("<root>") : *ParentWidgetName));
-	}
-
-	UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentWidget);
-	if (!ParentPanel)
-	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("Parent widget '%s' is not a panel widget"), *ParentWidget->GetName()));
-	}
-
-	UClass* ChildWidgetClass = ResolveUMGWidgetClassByName(WidgetClassName);
-	if (!ChildWidgetClass || !ChildWidgetClass->IsChildOf(UWidget::StaticClass()))
-	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("Unsupported widget_class '%s'"), *WidgetClassName));
-	}
-
-	UWidget* NewChild = WidgetBlueprint->WidgetTree->ConstructWidget<UWidget>(ChildWidgetClass, *WidgetName);
-	if (!NewChild)
-	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to construct child widget"));
-	}
-
-	UPanelSlot* AddedSlot = ParentPanel->AddChild(NewChild);
-	if (!AddedSlot)
-	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("Failed to add child '%s' to parent '%s'"), *WidgetName, *ParentWidget->GetName()));
+		return FUnrealMCPCommonUtils::CreateErrorResponse(AddError);
 	}
 
 	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
@@ -973,6 +1090,86 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChild(const TShare
 	ResultObj->SetStringField(TEXT("widget_class"), NewChild->GetClass()->GetName());
 	ResultObj->SetStringField(TEXT("slot_class"), AddedSlot->GetClass()->GetName());
 	ResultObj->SetObjectField(TEXT("widget"), BuildWidgetTreeNodeJson(NewChild, ParentWidget->GetName()));
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChildBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* ItemsPtr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("items"), ItemsPtr) || !ItemsPtr || ItemsPtr->Num() == 0)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'items' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(ItemsPtr->Num());
+
+	for (int32 ItemIndex = 0; ItemIndex < ItemsPtr->Num(); ++ItemIndex)
+	{
+		const TSharedPtr<FJsonObject>* ItemObjPtr = nullptr;
+		if (!(*ItemsPtr)[ItemIndex].IsValid() || !(*ItemsPtr)[ItemIndex]->TryGetObject(ItemObjPtr) || !ItemObjPtr || !ItemObjPtr->IsValid())
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] is not a valid object"), ItemIndex));
+		}
+
+		const TSharedPtr<FJsonObject>& ItemObj = *ItemObjPtr;
+		FString WidgetClassName;
+		FString WidgetName;
+		FString ParentWidgetName;
+
+		if (!ItemObj->TryGetStringField(TEXT("widget_class"), WidgetClassName))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] missing 'widget_class'"), ItemIndex));
+		}
+		if (!ItemObj->TryGetStringField(TEXT("widget_name"), WidgetName))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] missing 'widget_name'"), ItemIndex));
+		}
+		ItemObj->TryGetStringField(TEXT("parent_widget_name"), ParentWidgetName);
+
+		UWidget* ParentWidget = nullptr;
+		UWidget* NewChild = nullptr;
+		UPanelSlot* AddedSlot = nullptr;
+		FString AddError;
+		if (!AddWidgetChildInternal(WidgetBlueprint, ParentWidgetName, WidgetClassName, WidgetName, ParentWidget, NewChild, AddedSlot, AddError))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] add failed: %s"), ItemIndex, *AddError));
+		}
+
+		TSharedPtr<FJsonObject> ItemResult = MakeShared<FJsonObject>();
+		ItemResult->SetNumberField(TEXT("index"), ItemIndex);
+		ItemResult->SetStringField(TEXT("parent_widget_name"), ParentWidget->GetName());
+		ItemResult->SetStringField(TEXT("widget_name"), NewChild->GetName());
+		ItemResult->SetStringField(TEXT("widget_class"), NewChild->GetClass()->GetName());
+		ItemResult->SetStringField(TEXT("slot_class"), AddedSlot->GetClass()->GetName());
+		Results.Add(MakeShared<FJsonValueObject>(ItemResult));
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetNumberField(TEXT("created_count"), Results.Num());
+	ResultObj->SetArrayField(TEXT("results"), Results);
 	return ResultObj;
 }
 
@@ -1470,8 +1667,14 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleClearWidgetChildren(const T
 		}
 
 		RemovedTotalWidgets += CountWidgetSubtreeNodes(Child);
+		TArray<FName> RemovedNames;
+		CollectWidgetSubtreeNames(Child, RemovedNames);
 		if (WidgetBlueprint->WidgetTree->RemoveWidget(Child))
 		{
+			for (const FName& RemovedName : RemovedNames)
+			{
+				RemoveWidgetVariableGuid(WidgetBlueprint, RemovedName);
+			}
 			++RemovedDirectChildren;
 		}
 	}
@@ -1527,11 +1730,17 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleRemoveWidgetFromBlueprint(c
 
 	const FString ParentWidgetName = (TargetWidget->GetParent() != nullptr) ? TargetWidget->GetParent()->GetName() : FString();
 	const int32 RemovedTotalWidgets = CountWidgetSubtreeNodes(TargetWidget);
+	TArray<FName> RemovedNames;
+	CollectWidgetSubtreeNames(TargetWidget, RemovedNames);
 	const bool bRemoved = WidgetBlueprint->WidgetTree->RemoveWidget(TargetWidget);
 	if (!bRemoved)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
 			FString::Printf(TEXT("Failed to remove widget: %s"), *WidgetName));
+	}
+	for (const FName& RemovedName : RemovedNames)
+	{
+		RemoveWidgetVariableGuid(WidgetBlueprint, RemovedName);
 	}
 
 	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);

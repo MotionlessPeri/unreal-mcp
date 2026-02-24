@@ -286,6 +286,7 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("get_widget_tree") ||
                      CommandType == TEXT("ensure_widget_root") ||
                      CommandType == TEXT("add_widget_child") ||
+                     CommandType == TEXT("add_widget_child_batch") ||
                      CommandType == TEXT("set_canvas_slot_layout") ||
                      CommandType == TEXT("set_canvas_slot_layout_batch") ||
                      CommandType == TEXT("set_uniform_grid_slot") ||

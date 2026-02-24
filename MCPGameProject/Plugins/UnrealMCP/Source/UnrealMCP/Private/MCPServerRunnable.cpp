@@ -11,8 +11,9 @@
 #include "Misc/ScopeLock.h"
 #include "HAL/PlatformTime.h"
 
-// Buffer size for receiving data
+// Buffer size for receiving data per recv chunk (full messages may span multiple chunks).
 const int32 SocketReadBufferSize = 8192;
+const int32 MaxLoggedMessageChars = 1024;
 
 FMCPServerRunnable::FMCPServerRunnable(UUnrealMCPBridge* InBridge, TSharedPtr<FSocket> InListenerSocket)
     : Bridge(InBridge)
@@ -56,11 +57,12 @@ uint32 FMCPServerRunnable::Run()
                 ClientSocket->SetSendBufferSize(SocketBufferSize, SocketBufferSize);
                 ClientSocket->SetReceiveBufferSize(SocketBufferSize, SocketBufferSize);
                 
-                uint8 Buffer[SocketReadBufferSize];
+                uint8 Buffer[SocketReadBufferSize + 1];
+                FString MessageBuffer;
                 while (bRunning)
                 {
                     int32 BytesRead = 0;
-                    if (ClientSocket->Recv(Buffer, sizeof(Buffer), BytesRead))
+                    if (ClientSocket->Recv(Buffer, SocketReadBufferSize, BytesRead))
                     {
                         if (BytesRead == 0)
                         {
@@ -68,17 +70,27 @@ uint32 FMCPServerRunnable::Run()
                             break;
                         }
 
-                        // Convert received data to string
+                        // Convert received chunk to string and accumulate. Commands may exceed one recv chunk.
                         Buffer[BytesRead] = '\0';
-                        FString ReceivedText = UTF8_TO_TCHAR(Buffer);
-                        UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Received: %s"), *ReceivedText);
+                        const FString ReceivedChunk = UTF8_TO_TCHAR(reinterpret_cast<const char*>(Buffer));
+                        MessageBuffer += ReceivedChunk;
+                        UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Received chunk (%d bytes), total buffered chars=%d"), BytesRead, MessageBuffer.Len());
 
-                        // Parse JSON
+                        // Parse JSON only when a full message has been accumulated.
                         TSharedPtr<FJsonObject> JsonObject;
-                        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ReceivedText);
-                        
-                        if (FJsonSerializer::Deserialize(Reader, JsonObject))
+                        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(MessageBuffer);
+
+                        if (FJsonSerializer::Deserialize(Reader, JsonObject) && JsonObject.IsValid())
                         {
+                            if (MessageBuffer.Len() > MaxLoggedMessageChars)
+                            {
+                                UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Received JSON (chars=%d): %s...<truncated>"),
+                                    MessageBuffer.Len(), *MessageBuffer.Left(MaxLoggedMessageChars));
+                            }
+                            else
+                            {
+                                UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Received: %s"), *MessageBuffer);
+                            }
                             // Get command type
                             FString CommandType;
                             if (JsonObject->TryGetStringField(TEXT("type"), CommandType))
@@ -87,7 +99,15 @@ uint32 FMCPServerRunnable::Run()
                                 FString Response = Bridge->ExecuteCommand(CommandType, JsonObject->GetObjectField(TEXT("params")));
                                 
                                 // Log response for debugging
-                                UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Sending response: %s"), *Response);
+                                if (Response.Len() > MaxLoggedMessageChars)
+                                {
+                                    UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Sending response JSON (chars=%d): %s...<truncated>"),
+                                        Response.Len(), *Response.Left(MaxLoggedMessageChars));
+                                }
+                                else
+                                {
+                                    UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Sending response: %s"), *Response);
+                                }
                                 
                                 // Send response
                                 int32 BytesSent = 0;
@@ -98,15 +118,18 @@ uint32 FMCPServerRunnable::Run()
                                 else {
                                     UE_LOG(LogTemp, Display, TEXT("MCPServerRunnable: Response sent successfully, bytes: %d"), BytesSent);
                                 }
+                                MessageBuffer.Reset();
                             }
                             else
                             {
                                 UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Missing 'type' field in command"));
+                                MessageBuffer.Reset();
                             }
                         }
                         else
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("MCPServerRunnable: Failed to parse JSON from: %s"), *ReceivedText);
+                            // Partial payloads are expected for large commands; continue receiving.
+                            UE_LOG(LogTemp, Verbose, TEXT("MCPServerRunnable: JSON not complete yet (buffer chars=%d)"), MessageBuffer.Len());
                         }
                     }
                     else

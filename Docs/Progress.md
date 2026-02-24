@@ -253,6 +253,21 @@ Known Limitation Discovered (Composite Smoke):
 2. This is a tooling scalability limitation in the current per-command compile/save model, not a failure of layout/property primitives.
 3. Follow-up capability candidate: batch child creation and/or deferred compile/save mode for bulk widget-tree assembly.
 
+Route B Follow-up (2026-02-24): Full-board batch child creation unblock
+1. Added `add_widget_child_batch` to reduce 90x repeated `add_widget_child` calls into a single compile/save.
+2. Fixed WidgetBlueprint widget GUID metadata maintenance in UMG commands:
+   - add: populate `WidgetVariableNameToGuidMap`
+   - rename/remove/cleanup: keep GUID map in sync
+3. Fixed MCP server large-payload handling for batch commands:
+   - accumulate JSON across multiple `Recv` chunks before parse
+   - fix receive-buffer off-by-one null-termination risk
+   - truncate oversized request/response logging
+4. Added `Python/scripts/umg_add_widget_child_batch_smoke.py` and validated full 9x10 board generation (90 cells) in consumer `StupidChessUE`:
+   - `add_widget_child_batch` created 90 `Border` children under `BoardGrid`
+   - `set_uniform_grid_slot_batch` updated 90 slots
+   - `get_widget_tree` confirmed `board_child_count=90`
+   - no `WidgetVariableNameToGuidMap` ensure observed in the validated run
+
 ## Next Steps
 
 1. Add graph layout helper command(s) for deterministic readability at scale.
@@ -265,7 +280,7 @@ Known Limitation Discovered (Composite Smoke):
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
 6. Evaluate whether generic asset cleanup should be promoted beyond UMG-specific cleanup (cross-tooling ergonomics).
 7. Evaluate next batch helper (`set_text_block_properties_batch`) based on DebugBoard status-panel command pressure.
-8. Evaluate `add_widget_child_batch` (or deferred compile/save transaction mode) to unblock full 9x10 DebugBoard generation without GUID ensures.
+8. Evaluate deferred compile/save transaction mode (post-`add_widget_child_batch`) for even larger composite builds and lower editor churn.
 
 ## Validation Baseline
 

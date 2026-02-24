@@ -486,6 +486,51 @@ def register_umg_tools(mcp: FastMCP):
             return {"success": False, "message": error_msg}
 
     @mcp.tool()
+    def add_widget_child_batch(
+        ctx: Context,
+        blueprint_name: str,
+        items: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Batch-add generic UMG widgets as children of panel widgets in a Widget Blueprint.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            items: Array of child descriptors. Each item must include:
+                   widget_class, widget_name, and optional parent_widget_name
+
+        Returns:
+            Dict containing per-item created child metadata and slot classes.
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "blueprint_name": blueprint_name,
+                "items": items,
+            }
+
+            logger.info(f"Adding widget children batch with params: blueprint={blueprint_name}, count={len(items)}")
+            response = unreal.send_command("add_widget_child_batch", params)
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"Add widget child batch response: {response}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error adding widget child batch: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
     def set_canvas_slot_layout(
         ctx: Context,
         blueprint_name: str,

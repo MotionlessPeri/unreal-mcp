@@ -60,6 +60,17 @@ private:
     TSharedPtr<FJsonObject> HandleAddWidgetChild(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Batch-add generic widgets as children of panel widgets in the widget tree
+     * @param Params - Must include:
+     *                "blueprint_name" - Name/path of the target Widget Blueprint
+     *                "items" - array of objects; each object must include:
+     *                          "parent_widget_name" (optional, defaults to root),
+     *                          "widget_class", "widget_name"
+     * @return JSON response with per-item child and slot details
+     */
+    TSharedPtr<FJsonObject> HandleAddWidgetChildBatch(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Set layout properties for a widget in a CanvasPanelSlot
      * @param Params - Must include:
      *                "blueprint_name", "widget_name"

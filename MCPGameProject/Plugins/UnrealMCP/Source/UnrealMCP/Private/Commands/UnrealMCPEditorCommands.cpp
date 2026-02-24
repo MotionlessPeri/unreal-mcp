@@ -510,6 +510,36 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleSetActorProperty(const T
         }
     }
 
+    // Special handling for PointColor on AIPointRoute
+    // When PointColor is set, we need to sync the color to all AIPointInstance actors
+    if (PropertyName.Equals(TEXT("PointColor"), ESearchCase::IgnoreCase))
+    {
+        // First, set the property value normally
+        FString ErrorMessage;
+        if (!FUnrealMCPCommonUtils::SetObjectProperty(TargetActor, PropertyName, PropertyValue, ErrorMessage))
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(ErrorMessage);
+        }
+
+        // Then trigger PostEditChangeProperty to sync colors and mark dirty
+        // This simulates what happens when the property is changed in the Editor UI
+        #if WITH_EDITOR
+        FPropertyChangedEvent PropertyChangedEvent(
+            TargetActor->GetClass()->FindPropertyByName(FName(*PropertyName))
+        );
+        TargetActor->PostEditChangeProperty(PropertyChangedEvent);
+        #endif
+
+        UE_LOG(LogTemp, Display, TEXT("Set PointColor for %s and synced to AIPointInstance actors"), *ActorName);
+
+        TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+        ResultObj->SetStringField(TEXT("actor"), ActorName);
+        ResultObj->SetStringField(TEXT("property"), PropertyName);
+        ResultObj->SetBoolField(TEXT("success"), true);
+        ResultObj->SetObjectField(TEXT("actor_details"), FUnrealMCPCommonUtils::ActorToJsonObject(TargetActor, true));
+        return ResultObj;
+    }
+
     // Set the property using our utility function
     FString ErrorMessage;
     if (FUnrealMCPCommonUtils::SetObjectProperty(TargetActor, PropertyName, PropertyValue, ErrorMessage))

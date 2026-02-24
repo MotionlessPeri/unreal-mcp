@@ -224,6 +224,25 @@ Response includes readback values for:
 1. `text`
 2. `color`
 
+### set_text_block_properties_batch
+
+Batch-set `TextBlock` properties for multiple widgets.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `items` (array of objects)
+   - each item must include `widget_name`
+   - each item may include `text`, `color`
+
+Behavior:
+1. Applies per-item `TextBlock` updates using the same semantics as `set_text_block_properties`.
+2. Fails the command if any item is invalid (missing widget, widget not a `TextBlock`, malformed item object, etc.).
+3. Compiles and saves the widget blueprint once after all updates.
+
+Response includes:
+1. `updated_count`
+2. `results` (per-item readback values: `widget_name`, `widget_class`, `text`, `color`)
+
 ### clear_widget_children
 
 Remove all direct children from a panel widget (and their subtrees).

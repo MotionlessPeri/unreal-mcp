@@ -183,6 +183,16 @@
      - add four grid child widgets
      - batch-apply row/column (+ alignment) values
      - verify per-item readback and `UniformGridSlot` placement via widget tree.
+26. UMG post-Stage5 ergonomics enhancement (batch text updates) completed:
+   - added `set_text_block_properties_batch`:
+     - accepts `items[]` with `widget_name` and optional `text` / `color`
+     - reuses single-item `TextBlock` update semantics and readback shape
+     - applies all updates and compiles/saves once
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/umg_tools.py`, documented in `Docs/Tools/umg_tools.md`.
+   - added `Python/scripts/umg_text_block_batch_smoke.py` and validated in `StupidChessUE`:
+     - create probe widget with three `TextBlock` children
+     - batch-apply text + RGBA color values
+     - verify per-item readback (`text`, `color`) values in response.
 
 ## In Progress
 

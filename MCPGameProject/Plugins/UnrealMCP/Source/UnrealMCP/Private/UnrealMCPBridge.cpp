@@ -297,6 +297,7 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("set_widget_common_properties") ||
                      CommandType == TEXT("set_widget_common_properties_batch") ||
                      CommandType == TEXT("set_text_block_properties") ||
+                     CommandType == TEXT("set_text_block_properties_batch") ||
                      CommandType == TEXT("add_text_block_to_widget") ||
                      CommandType == TEXT("add_button_to_widget") ||
                      CommandType == TEXT("bind_widget_event") ||

@@ -135,6 +135,16 @@ private:
     TSharedPtr<FJsonObject> HandleSetTextBlockProperties(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Batch-set common TextBlock properties useful for debug UI automation
+     * @param Params - Must include:
+     *                "blueprint_name"
+     *                "items" - array of objects; each must include "widget_name"
+     *                          and may include "text", "color"
+     * @return JSON response with per-item readback values
+     */
+    TSharedPtr<FJsonObject> HandleSetTextBlockPropertiesBatch(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Remove all direct children from a panel widget (optionally root) and their subtrees
      * @param Params - Must include "blueprint_name"
      *                Optional: "widget_name" (defaults to root widget)

@@ -445,6 +445,42 @@ bool ApplyWidgetCommonPropertiesFields(const TSharedPtr<FJsonObject>& Params, UW
 	return true;
 }
 
+void FillTextBlockPropertiesReadback(TSharedPtr<FJsonObject> ResultObj, const UTextBlock* TextBlock)
+{
+	if (!ResultObj || !TextBlock)
+	{
+		return;
+	}
+
+	const FLinearColor ReadbackColor = TextBlock->GetColorAndOpacity().GetSpecifiedColor();
+	ResultObj->SetStringField(TEXT("widget_class"), TextBlock->GetClass()->GetName());
+	ResultObj->SetStringField(TEXT("text"), TextBlock->GetText().ToString());
+	ResultObj->SetArrayField(TEXT("color"), MakeJsonArrayFromLinearColor(ReadbackColor));
+}
+
+bool ApplyTextBlockPropertiesFields(const TSharedPtr<FJsonObject>& Params, UTextBlock* TextBlock, FString& OutError)
+{
+	if (!Params || !TextBlock)
+	{
+		OutError = TEXT("Invalid Params or TextBlock");
+		return false;
+	}
+
+	FString TextValue;
+	if (Params->TryGetStringField(TEXT("text"), TextValue))
+	{
+		TextBlock->SetText(FText::FromString(TextValue));
+	}
+
+	FLinearColor Color;
+	if (TryGetJsonLinearColor(Params, TEXT("color"), Color))
+	{
+		TextBlock->SetColorAndOpacity(FSlateColor(Color));
+	}
+
+	return true;
+}
+
 void FillUniformGridSlotReadback(TSharedPtr<FJsonObject> ResultObj, const UUniformGridSlot* GridSlot)
 {
 	if (!ResultObj || !GridSlot)
@@ -767,6 +803,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("set_text_block_properties"))
 	{
 		return HandleSetTextBlockProperties(Params);
+	}
+	else if (CommandName == TEXT("set_text_block_properties_batch"))
+	{
+		return HandleSetTextBlockPropertiesBatch(Params);
 	}
 	else if (CommandName == TEXT("add_widget_to_viewport"))
 	{
@@ -1580,29 +1620,92 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetTextBlockProperties(cons
 			FString::Printf(TEXT("TextBlock not found: %s"), *WidgetName));
 	}
 
-	FString TextValue;
-	if (Params->TryGetStringField(TEXT("text"), TextValue))
+	FString ApplyError;
+	if (!ApplyTextBlockPropertiesFields(Params, TextBlock, ApplyError))
 	{
-		TextBlock->SetText(FText::FromString(TextValue));
-	}
-
-	FLinearColor Color;
-	if (TryGetJsonLinearColor(Params, TEXT("color"), Color))
-	{
-		TextBlock->SetColorAndOpacity(FSlateColor(Color));
+		return FUnrealMCPCommonUtils::CreateErrorResponse(ApplyError);
 	}
 
 	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
-
-	const FLinearColor ReadbackColor = TextBlock->GetColorAndOpacity().GetSpecifiedColor();
 
 	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
 	ResultObj->SetBoolField(TEXT("success"), true);
 	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
 	ResultObj->SetStringField(TEXT("widget_name"), TextBlock->GetName());
-	ResultObj->SetStringField(TEXT("widget_class"), TextBlock->GetClass()->GetName());
-	ResultObj->SetStringField(TEXT("text"), TextBlock->GetText().ToString());
-	ResultObj->SetArrayField(TEXT("color"), MakeJsonArrayFromLinearColor(ReadbackColor));
+	FillTextBlockPropertiesReadback(ResultObj, TextBlock);
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetTextBlockPropertiesBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* ItemsPtr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("items"), ItemsPtr) || !ItemsPtr || ItemsPtr->Num() == 0)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'items' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(ItemsPtr->Num());
+
+	for (int32 ItemIndex = 0; ItemIndex < ItemsPtr->Num(); ++ItemIndex)
+	{
+		const TSharedPtr<FJsonObject>* ItemObjPtr = nullptr;
+		if (!(*ItemsPtr)[ItemIndex].IsValid() || !(*ItemsPtr)[ItemIndex]->TryGetObject(ItemObjPtr) || !ItemObjPtr || !ItemObjPtr->IsValid())
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] is not a valid object"), ItemIndex));
+		}
+
+		const TSharedPtr<FJsonObject>& ItemObj = *ItemObjPtr;
+		FString WidgetName;
+		if (!ItemObj->TryGetStringField(TEXT("widget_name"), WidgetName))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] missing 'widget_name'"), ItemIndex));
+		}
+
+		UTextBlock* TextBlock = Cast<UTextBlock>(WidgetBlueprint->WidgetTree->FindWidget(*WidgetName));
+		if (!TextBlock)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("TextBlock not found: %s"), *WidgetName));
+		}
+
+		FString ApplyError;
+		if (!ApplyTextBlockPropertiesFields(ItemObj, TextBlock, ApplyError))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] apply failed: %s"), ItemIndex, *ApplyError));
+		}
+
+		TSharedPtr<FJsonObject> ItemResult = MakeShared<FJsonObject>();
+		ItemResult->SetNumberField(TEXT("index"), ItemIndex);
+		ItemResult->SetStringField(TEXT("widget_name"), TextBlock->GetName());
+		FillTextBlockPropertiesReadback(ItemResult, TextBlock);
+		Results.Add(MakeShared<FJsonValueObject>(ItemResult));
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetNumberField(TEXT("updated_count"), Results.Num());
+	ResultObj->SetArrayField(TEXT("results"), Results);
 	return ResultObj;
 }
 

@@ -204,6 +204,65 @@ TArray<TSharedPtr<FJsonValue>> MakeJsonArrayFromMargin(const FMargin& Margin)
 	};
 }
 
+void FillCanvasSlotLayoutReadback(TSharedPtr<FJsonObject> ResultObj, const UCanvasPanelSlot* CanvasSlot)
+{
+	if (!ResultObj || !CanvasSlot)
+	{
+		return;
+	}
+
+	ResultObj->SetStringField(TEXT("slot_class"), CanvasSlot->GetClass()->GetName());
+	ResultObj->SetArrayField(TEXT("position"), MakeJsonArrayFromVector2(CanvasSlot->GetPosition()));
+	ResultObj->SetArrayField(TEXT("size"), MakeJsonArrayFromVector2(CanvasSlot->GetSize()));
+	ResultObj->SetArrayField(TEXT("alignment"), MakeJsonArrayFromVector2(CanvasSlot->GetAlignment()));
+	ResultObj->SetArrayField(TEXT("anchors"), MakeJsonArrayFromAnchors(CanvasSlot->GetAnchors()));
+	ResultObj->SetBoolField(TEXT("auto_size"), CanvasSlot->GetAutoSize());
+	ResultObj->SetNumberField(TEXT("z_order"), CanvasSlot->GetZOrder());
+}
+
+bool ApplyCanvasSlotLayoutFields(const TSharedPtr<FJsonObject>& Params, UCanvasPanelSlot* CanvasSlot, FString& OutError)
+{
+	if (!Params || !CanvasSlot)
+	{
+		OutError = TEXT("Invalid Params or CanvasSlot");
+		return false;
+	}
+
+	FVector2D Vec2Value;
+	if (TryGetJsonVector2(Params, TEXT("position"), Vec2Value))
+	{
+		CanvasSlot->SetPosition(Vec2Value);
+	}
+	if (TryGetJsonVector2(Params, TEXT("size"), Vec2Value))
+	{
+		CanvasSlot->SetSize(Vec2Value);
+	}
+	if (TryGetJsonVector2(Params, TEXT("alignment"), Vec2Value))
+	{
+		CanvasSlot->SetAlignment(Vec2Value);
+	}
+
+	FAnchors Anchors;
+	if (TryGetJsonAnchors(Params, TEXT("anchors"), Anchors))
+	{
+		CanvasSlot->SetAnchors(Anchors);
+	}
+
+	bool bAutoSize = false;
+	if (Params->TryGetBoolField(TEXT("auto_size"), bAutoSize))
+	{
+		CanvasSlot->SetAutoSize(bAutoSize);
+	}
+
+	int32 ZOrder = 0;
+	if (Params->TryGetNumberField(TEXT("z_order"), ZOrder))
+	{
+		CanvasSlot->SetZOrder(ZOrder);
+	}
+
+	return true;
+}
+
 bool TryGetJsonLinearColor(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FLinearColor& OutColor)
 {
 	const TArray<TSharedPtr<FJsonValue>>* ArrayPtr = nullptr;
@@ -418,6 +477,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("set_canvas_slot_layout"))
 	{
 		return HandleSetCanvasSlotLayout(Params);
+	}
+	else if (CommandName == TEXT("set_canvas_slot_layout_batch"))
+	{
+		return HandleSetCanvasSlotLayoutBatch(Params);
 	}
 	else if (CommandName == TEXT("set_uniform_grid_slot"))
 	{
@@ -836,36 +899,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetCanvasSlotLayout(const T
 			FString::Printf(TEXT("Widget '%s' is not in a CanvasPanelSlot"), *WidgetName));
 	}
 
-	FVector2D Vec2Value;
-	if (TryGetJsonVector2(Params, TEXT("position"), Vec2Value))
+	FString ApplyError;
+	if (!ApplyCanvasSlotLayoutFields(Params, CanvasSlot, ApplyError))
 	{
-		CanvasSlot->SetPosition(Vec2Value);
-	}
-	if (TryGetJsonVector2(Params, TEXT("size"), Vec2Value))
-	{
-		CanvasSlot->SetSize(Vec2Value);
-	}
-	if (TryGetJsonVector2(Params, TEXT("alignment"), Vec2Value))
-	{
-		CanvasSlot->SetAlignment(Vec2Value);
-	}
-
-	FAnchors Anchors;
-	if (TryGetJsonAnchors(Params, TEXT("anchors"), Anchors))
-	{
-		CanvasSlot->SetAnchors(Anchors);
-	}
-
-	bool bAutoSize = false;
-	if (Params->TryGetBoolField(TEXT("auto_size"), bAutoSize))
-	{
-		CanvasSlot->SetAutoSize(bAutoSize);
-	}
-
-	int32 ZOrder = 0;
-	if (Params->TryGetNumberField(TEXT("z_order"), ZOrder))
-	{
-		CanvasSlot->SetZOrder(ZOrder);
+		return FUnrealMCPCommonUtils::CreateErrorResponse(ApplyError);
 	}
 
 	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
@@ -874,13 +911,87 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetCanvasSlotLayout(const T
 	ResultObj->SetBoolField(TEXT("success"), true);
 	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
 	ResultObj->SetStringField(TEXT("widget_name"), Widget->GetName());
-	ResultObj->SetStringField(TEXT("slot_class"), CanvasSlot->GetClass()->GetName());
-	ResultObj->SetArrayField(TEXT("position"), MakeJsonArrayFromVector2(CanvasSlot->GetPosition()));
-	ResultObj->SetArrayField(TEXT("size"), MakeJsonArrayFromVector2(CanvasSlot->GetSize()));
-	ResultObj->SetArrayField(TEXT("alignment"), MakeJsonArrayFromVector2(CanvasSlot->GetAlignment()));
-	ResultObj->SetArrayField(TEXT("anchors"), MakeJsonArrayFromAnchors(CanvasSlot->GetAnchors()));
-	ResultObj->SetBoolField(TEXT("auto_size"), CanvasSlot->GetAutoSize());
-	ResultObj->SetNumberField(TEXT("z_order"), CanvasSlot->GetZOrder());
+	FillCanvasSlotLayoutReadback(ResultObj, CanvasSlot);
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetCanvasSlotLayoutBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* ItemsPtr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("items"), ItemsPtr) || !ItemsPtr || ItemsPtr->Num() == 0)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'items' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(ItemsPtr->Num());
+
+	for (int32 ItemIndex = 0; ItemIndex < ItemsPtr->Num(); ++ItemIndex)
+	{
+		const TSharedPtr<FJsonObject>* ItemObjPtr = nullptr;
+		if (!(*ItemsPtr)[ItemIndex].IsValid() || !(*ItemsPtr)[ItemIndex]->TryGetObject(ItemObjPtr) || !ItemObjPtr || !ItemObjPtr->IsValid())
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] is not a valid object"), ItemIndex));
+		}
+
+		const TSharedPtr<FJsonObject>& ItemObj = *ItemObjPtr;
+		FString WidgetName;
+		if (!ItemObj->TryGetStringField(TEXT("widget_name"), WidgetName))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] missing 'widget_name'"), ItemIndex));
+		}
+
+		UWidget* Widget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
+		if (!Widget)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+		}
+
+		UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot);
+		if (!CanvasSlot)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Widget '%s' is not in a CanvasPanelSlot"), *WidgetName));
+		}
+
+		FString ApplyError;
+		if (!ApplyCanvasSlotLayoutFields(ItemObj, CanvasSlot, ApplyError))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] apply failed: %s"), ItemIndex, *ApplyError));
+		}
+
+		TSharedPtr<FJsonObject> ItemResult = MakeShared<FJsonObject>();
+		ItemResult->SetNumberField(TEXT("index"), ItemIndex);
+		ItemResult->SetStringField(TEXT("widget_name"), Widget->GetName());
+		FillCanvasSlotLayoutReadback(ItemResult, CanvasSlot);
+		Results.Add(MakeShared<FJsonValueObject>(ItemResult));
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetNumberField(TEXT("updated_count"), Results.Num());
+	ResultObj->SetArrayField(TEXT("results"), Results);
 	return ResultObj;
 }
 

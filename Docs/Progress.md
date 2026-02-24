@@ -151,6 +151,17 @@
      - dry-run returns both assets
      - delete run removes both assets
      - `get_widget_tree` fails afterward for deleted assets.
+23. UMG post-Stage5 ergonomics enhancement (batch canvas layout) completed:
+   - added `set_canvas_slot_layout_batch`:
+     - accepts `items[]` where each item targets a widget by `widget_name`
+     - each item supports the same fields as `set_canvas_slot_layout`
+     - applies all updates and compiles/saves once (better than repeated single-command calls)
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/umg_tools.py`, documented in `Docs/Tools/umg_tools.md`.
+   - added `Python/scripts/umg_canvas_batch_layout_smoke.py` and validated in `StupidChessUE`:
+     - create probe widget
+     - add two canvas children
+     - batch-apply layout for both widgets
+     - verify per-item readback and `CanvasPanelSlot` tree placement.
 
 ## In Progress
 
@@ -158,7 +169,7 @@
 2. Delegate binding ergonomics for large graphs (batch helper + layout utilities).
 3. Add compile-error query/read command(s) to reduce manual log scraping in consumers.
 4. UMG Designer automation capability expansion (Route B for consumer `StupidChess` DebugBoard automation).
-5. UMG post-Stage5 ergonomics planning (layout/template helpers and higher-level build macros).
+5. UMG post-Stage5 ergonomics planning (template helpers and higher-level build macros).
 
 ### UMG Automation Roadmap (Decision Update, 2026-02-23)
 
@@ -216,6 +227,7 @@ Smoke Strategy (applies after each stage):
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
 6. Evaluate whether generic asset cleanup should be promoted beyond UMG-specific cleanup (cross-tooling ergonomics).
+7. Evaluate batch helpers for non-canvas operations (`set_widget_common_properties_batch`, `set_uniform_grid_slot_batch`) based on DebugBoard command pressure.
 
 ## Validation Baseline
 

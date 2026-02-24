@@ -69,6 +69,16 @@ private:
     TSharedPtr<FJsonObject> HandleSetCanvasSlotLayout(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Batch-set layout properties for multiple widgets hosted in CanvasPanelSlot
+     * @param Params - Must include:
+     *                "blueprint_name"
+     *                "items" - array of objects; each object must include "widget_name"
+     *                          and may include same optional fields as set_canvas_slot_layout
+     * @return JSON response with per-item readback layout values
+     */
+    TSharedPtr<FJsonObject> HandleSetCanvasSlotLayoutBatch(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Set layout properties for a widget in a UniformGridSlot
      * @param Params - Must include:
      *                "blueprint_name", "widget_name"

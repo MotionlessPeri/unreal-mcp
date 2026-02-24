@@ -94,6 +94,26 @@ Response includes readback values for:
 5. `auto_size`
 6. `z_order`
 
+### set_canvas_slot_layout_batch
+
+Batch-set layout values for multiple widgets hosted in `CanvasPanelSlot`.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `items` (array of objects)
+   - each item must include `widget_name`
+   - each item may include the same optional fields as `set_canvas_slot_layout`
+     (`position`, `size`, `alignment`, `anchors`, `auto_size`, `z_order`)
+
+Behavior:
+1. Applies per-item layout updates to existing widgets in the target `WidgetBlueprint`.
+2. Validates each item before proceeding to the next; any invalid item fails the command.
+3. Compiles and saves the widget blueprint once after all item updates (ergonomic improvement vs repeated single calls).
+
+Response includes:
+1. `updated_count`
+2. `results` (per-item readback layout values)
+
 ### set_uniform_grid_slot
 
 Set layout values for a widget hosted in a `UniformGridSlot`.

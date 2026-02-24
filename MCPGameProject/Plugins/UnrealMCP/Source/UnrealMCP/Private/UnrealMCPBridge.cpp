@@ -289,6 +289,7 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("set_canvas_slot_layout") ||
                      CommandType == TEXT("set_canvas_slot_layout_batch") ||
                      CommandType == TEXT("set_uniform_grid_slot") ||
+                     CommandType == TEXT("set_uniform_grid_slot_batch") ||
                      CommandType == TEXT("clear_widget_children") ||
                      CommandType == TEXT("remove_widget_from_blueprint") ||
                      CommandType == TEXT("delete_widget_blueprints_by_prefix") ||

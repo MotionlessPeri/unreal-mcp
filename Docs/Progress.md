@@ -172,6 +172,17 @@
      - create probe widget with `TextBlock`/`Button`/`Border`
      - batch-apply mixed visibility/is_enabled states
      - verify per-item readback values (including `SelfHitTestInvisible`) in response.
+25. UMG post-Stage5 ergonomics enhancement (batch uniform-grid layout) completed:
+   - added `set_uniform_grid_slot_batch`:
+     - accepts `items[]` with `widget_name` and optional `row/column/horizontal_alignment/vertical_alignment`
+     - reuses single-item validation semantics for alignment parsing
+     - applies all updates and compiles/saves once
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/umg_tools.py`, documented in `Docs/Tools/umg_tools.md`.
+   - added `Python/scripts/umg_uniform_grid_batch_smoke.py` and validated in `StupidChessUE`:
+     - create probe widget with `UniformGridPanel`
+     - add four grid child widgets
+     - batch-apply row/column (+ alignment) values
+     - verify per-item readback and `UniformGridSlot` placement via widget tree.
 
 ## In Progress
 
@@ -237,7 +248,7 @@ Smoke Strategy (applies after each stage):
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
 6. Evaluate whether generic asset cleanup should be promoted beyond UMG-specific cleanup (cross-tooling ergonomics).
-7. Evaluate next batch helper (`set_uniform_grid_slot_batch`) based on DebugBoard command pressure.
+7. Evaluate next batch helper (`set_text_block_properties_batch`) based on DebugBoard status-panel command pressure.
 
 ## Validation Baseline
 

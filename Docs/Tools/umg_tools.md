@@ -135,6 +135,28 @@ Response includes readback values for:
 Compatibility note:
 1. `UUniformGridSlot` in current UE 5.7 consumer validation does not expose padding setters/getters, so padding is intentionally not part of this command.
 
+### set_uniform_grid_slot_batch
+
+Batch-set layout values for multiple widgets hosted in `UniformGridSlot`.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `items` (array of objects)
+   - each item must include `widget_name`
+   - each item may include `row`, `column`, `horizontal_alignment`, `vertical_alignment`
+
+Behavior:
+1. Applies per-item grid slot updates using the same validation semantics as `set_uniform_grid_slot`.
+2. Fails the command if any item is invalid (missing widget, wrong slot type, invalid alignment string).
+3. Compiles and saves the widget blueprint once after all updates.
+
+Response includes:
+1. `updated_count`
+2. `results` (per-item readback values for row/column/alignment and slot class)
+
+Use case note:
+1. This is the recommended primitive for DebugBoard/board-grid cell layout because it reduces command count and compiles/saves only once.
+
 ### set_widget_common_properties
 
 Set common `UWidget` properties useful for debug UI automation.

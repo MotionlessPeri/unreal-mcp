@@ -88,6 +88,16 @@ private:
     TSharedPtr<FJsonObject> HandleSetUniformGridSlot(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Batch-set layout properties for multiple widgets hosted in UniformGridSlot
+     * @param Params - Must include:
+     *                "blueprint_name"
+     *                "items" - array of objects; each object must include "widget_name"
+     *                          and may include same optional fields as set_uniform_grid_slot
+     * @return JSON response with per-item readback slot values
+     */
+    TSharedPtr<FJsonObject> HandleSetUniformGridSlotBatch(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Set common UWidget properties useful for debug UI automation
      * @param Params - Must include "blueprint_name", "widget_name"
      *                Optional: "visibility", "is_enabled"

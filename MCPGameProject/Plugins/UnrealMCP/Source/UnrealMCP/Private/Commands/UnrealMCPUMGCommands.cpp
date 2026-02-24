@@ -328,6 +328,9 @@ FString VisibilityToString(const ESlateVisibility Visibility)
 	}
 }
 
+bool TryParseHorizontalAlignment(const FString& InValue, EHorizontalAlignment& OutValue);
+bool TryParseVerticalAlignment(const FString& InValue, EVerticalAlignment& OutValue);
+
 void FillWidgetCommonPropertiesReadback(TSharedPtr<FJsonObject> ResultObj, const UWidget* Widget)
 {
 	if (!ResultObj || !Widget)
@@ -365,6 +368,65 @@ bool ApplyWidgetCommonPropertiesFields(const TSharedPtr<FJsonObject>& Params, UW
 	if (Params->TryGetBoolField(TEXT("is_enabled"), bIsEnabled))
 	{
 		Widget->SetIsEnabled(bIsEnabled);
+	}
+
+	return true;
+}
+
+void FillUniformGridSlotReadback(TSharedPtr<FJsonObject> ResultObj, const UUniformGridSlot* GridSlot)
+{
+	if (!ResultObj || !GridSlot)
+	{
+		return;
+	}
+
+	ResultObj->SetStringField(TEXT("slot_class"), GridSlot->GetClass()->GetName());
+	ResultObj->SetNumberField(TEXT("row"), GridSlot->GetRow());
+	ResultObj->SetNumberField(TEXT("column"), GridSlot->GetColumn());
+	ResultObj->SetNumberField(TEXT("horizontal_alignment"), static_cast<int32>(GridSlot->GetHorizontalAlignment()));
+	ResultObj->SetNumberField(TEXT("vertical_alignment"), static_cast<int32>(GridSlot->GetVerticalAlignment()));
+}
+
+bool ApplyUniformGridSlotFields(const TSharedPtr<FJsonObject>& Params, UUniformGridSlot* GridSlot, FString& OutError)
+{
+	if (!Params || !GridSlot)
+	{
+		OutError = TEXT("Invalid Params or GridSlot");
+		return false;
+	}
+
+	int32 IntValue = 0;
+	if (Params->TryGetNumberField(TEXT("row"), IntValue))
+	{
+		GridSlot->SetRow(IntValue);
+	}
+	if (Params->TryGetNumberField(TEXT("column"), IntValue))
+	{
+		GridSlot->SetColumn(IntValue);
+	}
+
+	FString HorizontalAlignmentStr;
+	if (Params->TryGetStringField(TEXT("horizontal_alignment"), HorizontalAlignmentStr))
+	{
+		EHorizontalAlignment Alignment = HAlign_Fill;
+		if (!TryParseHorizontalAlignment(HorizontalAlignmentStr, Alignment))
+		{
+			OutError = FString::Printf(TEXT("Invalid horizontal_alignment: %s"), *HorizontalAlignmentStr);
+			return false;
+		}
+		GridSlot->SetHorizontalAlignment(Alignment);
+	}
+
+	FString VerticalAlignmentStr;
+	if (Params->TryGetStringField(TEXT("vertical_alignment"), VerticalAlignmentStr))
+	{
+		EVerticalAlignment Alignment = VAlign_Fill;
+		if (!TryParseVerticalAlignment(VerticalAlignmentStr, Alignment))
+		{
+			OutError = FString::Printf(TEXT("Invalid vertical_alignment: %s"), *VerticalAlignmentStr);
+			return false;
+		}
+		GridSlot->SetVerticalAlignment(Alignment);
 	}
 
 	return true;
@@ -527,6 +589,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("set_uniform_grid_slot"))
 	{
 		return HandleSetUniformGridSlot(Params);
+	}
+	else if (CommandName == TEXT("set_uniform_grid_slot_batch"))
+	{
+		return HandleSetUniformGridSlotBatch(Params);
 	}
 	else if (CommandName == TEXT("clear_widget_children"))
 	{
@@ -1076,38 +1142,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetUniformGridSlot(const TS
 			FString::Printf(TEXT("Widget '%s' is not in a UniformGridSlot"), *WidgetName));
 	}
 
-	int32 IntValue = 0;
-	if (Params->TryGetNumberField(TEXT("row"), IntValue))
+	FString ApplyError;
+	if (!ApplyUniformGridSlotFields(Params, GridSlot, ApplyError))
 	{
-		GridSlot->SetRow(IntValue);
-	}
-	if (Params->TryGetNumberField(TEXT("column"), IntValue))
-	{
-		GridSlot->SetColumn(IntValue);
-	}
-
-	FString HorizontalAlignmentStr;
-	if (Params->TryGetStringField(TEXT("horizontal_alignment"), HorizontalAlignmentStr))
-	{
-		EHorizontalAlignment Alignment = HAlign_Fill;
-		if (!TryParseHorizontalAlignment(HorizontalAlignmentStr, Alignment))
-		{
-			return FUnrealMCPCommonUtils::CreateErrorResponse(
-				FString::Printf(TEXT("Invalid horizontal_alignment: %s"), *HorizontalAlignmentStr));
-		}
-		GridSlot->SetHorizontalAlignment(Alignment);
-	}
-
-	FString VerticalAlignmentStr;
-	if (Params->TryGetStringField(TEXT("vertical_alignment"), VerticalAlignmentStr))
-	{
-		EVerticalAlignment Alignment = VAlign_Fill;
-		if (!TryParseVerticalAlignment(VerticalAlignmentStr, Alignment))
-		{
-			return FUnrealMCPCommonUtils::CreateErrorResponse(
-				FString::Printf(TEXT("Invalid vertical_alignment: %s"), *VerticalAlignmentStr));
-		}
-		GridSlot->SetVerticalAlignment(Alignment);
+		return FUnrealMCPCommonUtils::CreateErrorResponse(ApplyError);
 	}
 
 	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
@@ -1116,11 +1154,87 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetUniformGridSlot(const TS
 	ResultObj->SetBoolField(TEXT("success"), true);
 	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
 	ResultObj->SetStringField(TEXT("widget_name"), Widget->GetName());
-	ResultObj->SetStringField(TEXT("slot_class"), GridSlot->GetClass()->GetName());
-	ResultObj->SetNumberField(TEXT("row"), GridSlot->GetRow());
-	ResultObj->SetNumberField(TEXT("column"), GridSlot->GetColumn());
-	ResultObj->SetNumberField(TEXT("horizontal_alignment"), static_cast<int32>(GridSlot->GetHorizontalAlignment()));
-	ResultObj->SetNumberField(TEXT("vertical_alignment"), static_cast<int32>(GridSlot->GetVerticalAlignment()));
+	FillUniformGridSlotReadback(ResultObj, GridSlot);
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetUniformGridSlotBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* ItemsPtr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("items"), ItemsPtr) || !ItemsPtr || ItemsPtr->Num() == 0)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'items' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(ItemsPtr->Num());
+
+	for (int32 ItemIndex = 0; ItemIndex < ItemsPtr->Num(); ++ItemIndex)
+	{
+		const TSharedPtr<FJsonObject>* ItemObjPtr = nullptr;
+		if (!(*ItemsPtr)[ItemIndex].IsValid() || !(*ItemsPtr)[ItemIndex]->TryGetObject(ItemObjPtr) || !ItemObjPtr || !ItemObjPtr->IsValid())
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] is not a valid object"), ItemIndex));
+		}
+
+		const TSharedPtr<FJsonObject>& ItemObj = *ItemObjPtr;
+		FString WidgetName;
+		if (!ItemObj->TryGetStringField(TEXT("widget_name"), WidgetName))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] missing 'widget_name'"), ItemIndex));
+		}
+
+		UWidget* Widget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
+		if (!Widget)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+		}
+
+		UUniformGridSlot* GridSlot = Cast<UUniformGridSlot>(Widget->Slot);
+		if (!GridSlot)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Widget '%s' is not in a UniformGridSlot"), *WidgetName));
+		}
+
+		FString ApplyError;
+		if (!ApplyUniformGridSlotFields(ItemObj, GridSlot, ApplyError))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] apply failed: %s"), ItemIndex, *ApplyError));
+		}
+
+		TSharedPtr<FJsonObject> ItemResult = MakeShared<FJsonObject>();
+		ItemResult->SetNumberField(TEXT("index"), ItemIndex);
+		ItemResult->SetStringField(TEXT("widget_name"), Widget->GetName());
+		FillUniformGridSlotReadback(ItemResult, GridSlot);
+		Results.Add(MakeShared<FJsonValueObject>(ItemResult));
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetNumberField(TEXT("updated_count"), Results.Num());
+	ResultObj->SetArrayField(TEXT("results"), Results);
 	return ResultObj;
 }
 

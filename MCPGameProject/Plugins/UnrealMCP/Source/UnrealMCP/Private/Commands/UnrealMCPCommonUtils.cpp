@@ -667,11 +667,14 @@ TSharedPtr<FJsonObject> FUnrealMCPCommonUtils::ActorToJsonObject(AActor* Actor, 
     {
         return nullptr;
     }
-    
+
     TSharedPtr<FJsonObject> ActorObject = MakeShared<FJsonObject>();
     ActorObject->SetStringField(TEXT("name"), Actor->GetName());
     ActorObject->SetStringField(TEXT("class"), Actor->GetClass()->GetName());
-    
+
+    // Include ActorLabel for verification
+    ActorObject->SetStringField(TEXT("label"), Actor->GetActorLabel());
+
     FVector Location = Actor->GetActorLocation();
     TArray<TSharedPtr<FJsonValue>> LocationArray;
     LocationArray.Add(MakeShared<FJsonValueNumber>(Location.X));

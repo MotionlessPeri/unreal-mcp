@@ -481,9 +481,35 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleSetActorProperty(const T
     {
         return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'property_value' parameter"));
     }
-    
+
     TSharedPtr<FJsonValue> PropertyValue = Params->Values.FindRef(TEXT("property_value"));
-    
+
+    // Special handling for ActorLabel (not a UPROPERTY, needs special handling)
+    if (PropertyName.Equals(TEXT("ActorLabel"), ESearchCase::IgnoreCase))
+    {
+        if (PropertyValue->Type == EJson::String)
+        {
+            FString NewLabel = PropertyValue->AsString();
+
+            // Set the actor label
+            TargetActor->SetActorLabel(NewLabel, true); // true = mark package dirty
+
+            UE_LOG(LogTemp, Display, TEXT("Set ActorLabel for %s to: %s"), *ActorName, *NewLabel);
+
+            TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+            ResultObj->SetStringField(TEXT("actor"), ActorName);
+            ResultObj->SetStringField(TEXT("property"), PropertyName);
+            ResultObj->SetStringField(TEXT("new_label"), NewLabel);
+            ResultObj->SetBoolField(TEXT("success"), true);
+            ResultObj->SetObjectField(TEXT("actor_details"), FUnrealMCPCommonUtils::ActorToJsonObject(TargetActor, true));
+            return ResultObj;
+        }
+        else
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("ActorLabel value must be a string"));
+        }
+    }
+
     // Set the property using our utility function
     FString ErrorMessage;
     if (FUnrealMCPCommonUtils::SetObjectProperty(TargetActor, PropertyName, PropertyValue, ErrorMessage))
@@ -493,7 +519,7 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleSetActorProperty(const T
         ResultObj->SetStringField(TEXT("actor"), ActorName);
         ResultObj->SetStringField(TEXT("property"), PropertyName);
         ResultObj->SetBoolField(TEXT("success"), true);
-        
+
         // Also include the full actor details
         ResultObj->SetObjectField(TEXT("actor_details"), FUnrealMCPCommonUtils::ActorToJsonObject(TargetActor, true));
         return ResultObj;

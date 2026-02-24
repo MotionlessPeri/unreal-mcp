@@ -96,6 +96,16 @@ private:
     TSharedPtr<FJsonObject> HandleSetWidgetCommonProperties(const TSharedPtr<FJsonObject>& Params);
 
     /**
+     * Batch-set common UWidget properties useful for debug UI automation
+     * @param Params - Must include:
+     *                "blueprint_name"
+     *                "items" - array of objects; each must include "widget_name"
+     *                          and may include "visibility", "is_enabled"
+     * @return JSON response with per-item readback values
+     */
+    TSharedPtr<FJsonObject> HandleSetWidgetCommonPropertiesBatch(const TSharedPtr<FJsonObject>& Params);
+
+    /**
      * Set common TextBlock properties useful for debug UI automation
      * @param Params - Must include "blueprint_name", "widget_name"
      *                Optional: "text", "color"

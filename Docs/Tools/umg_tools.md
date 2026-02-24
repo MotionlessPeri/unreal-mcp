@@ -150,6 +150,25 @@ Response includes readback values for:
 2. `is_enabled`
 3. `is_variable`
 
+### set_widget_common_properties_batch
+
+Batch-set common `UWidget` properties for multiple widgets.
+
+Canonical parameters:
+1. `blueprint_name`
+2. `items` (array of objects)
+   - each item must include `widget_name`
+   - each item may include `visibility`, `is_enabled`
+
+Behavior:
+1. Applies per-item `UWidget` property updates using the same validation semantics as `set_widget_common_properties`.
+2. Fails the command if any item is invalid (missing widget, invalid visibility string, etc.).
+3. Compiles and saves the widget blueprint once after all updates.
+
+Response includes:
+1. `updated_count`
+2. `results` (per-item readback values: `widget_name`, `widget_class`, `visibility`, `is_enabled`, `is_variable`)
+
 ### set_text_block_properties
 
 Set common `TextBlock` properties useful for debug UI automation.

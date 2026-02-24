@@ -328,6 +328,48 @@ FString VisibilityToString(const ESlateVisibility Visibility)
 	}
 }
 
+void FillWidgetCommonPropertiesReadback(TSharedPtr<FJsonObject> ResultObj, const UWidget* Widget)
+{
+	if (!ResultObj || !Widget)
+	{
+		return;
+	}
+
+	ResultObj->SetStringField(TEXT("widget_class"), Widget->GetClass()->GetName());
+	ResultObj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
+	ResultObj->SetBoolField(TEXT("is_enabled"), Widget->GetIsEnabled());
+	ResultObj->SetBoolField(TEXT("is_variable"), Widget->bIsVariable);
+}
+
+bool ApplyWidgetCommonPropertiesFields(const TSharedPtr<FJsonObject>& Params, UWidget* Widget, FString& OutError)
+{
+	if (!Params || !Widget)
+	{
+		OutError = TEXT("Invalid Params or Widget");
+		return false;
+	}
+
+	FString VisibilityStr;
+	if (Params->TryGetStringField(TEXT("visibility"), VisibilityStr))
+	{
+		ESlateVisibility ParsedVisibility = ESlateVisibility::Visible;
+		if (!TryParseVisibility(VisibilityStr, ParsedVisibility))
+		{
+			OutError = FString::Printf(TEXT("Invalid visibility: %s"), *VisibilityStr);
+			return false;
+		}
+		Widget->SetVisibility(ParsedVisibility);
+	}
+
+	bool bIsEnabled = false;
+	if (Params->TryGetBoolField(TEXT("is_enabled"), bIsEnabled))
+	{
+		Widget->SetIsEnabled(bIsEnabled);
+	}
+
+	return true;
+}
+
 bool TryParseHorizontalAlignment(const FString& InValue, EHorizontalAlignment& OutValue)
 {
 	const FString Value = InValue.TrimStartAndEnd();
@@ -501,6 +543,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCommand(const FString& Comm
 	else if (CommandName == TEXT("set_widget_common_properties"))
 	{
 		return HandleSetWidgetCommonProperties(Params);
+	}
+	else if (CommandName == TEXT("set_widget_common_properties_batch"))
+	{
+		return HandleSetWidgetCommonPropertiesBatch(Params);
 	}
 	else if (CommandName == TEXT("set_text_block_properties"))
 	{
@@ -1106,22 +1152,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetWidgetCommonProperties(c
 			FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
 	}
 
-	FString VisibilityStr;
-	if (Params->TryGetStringField(TEXT("visibility"), VisibilityStr))
+	FString ApplyError;
+	if (!ApplyWidgetCommonPropertiesFields(Params, Widget, ApplyError))
 	{
-		ESlateVisibility ParsedVisibility = ESlateVisibility::Visible;
-		if (!TryParseVisibility(VisibilityStr, ParsedVisibility))
-		{
-			return FUnrealMCPCommonUtils::CreateErrorResponse(
-				FString::Printf(TEXT("Invalid visibility: %s"), *VisibilityStr));
-		}
-		Widget->SetVisibility(ParsedVisibility);
-	}
-
-	bool bIsEnabled = false;
-	if (Params->TryGetBoolField(TEXT("is_enabled"), bIsEnabled))
-	{
-		Widget->SetIsEnabled(bIsEnabled);
+		return FUnrealMCPCommonUtils::CreateErrorResponse(ApplyError);
 	}
 
 	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
@@ -1130,10 +1164,80 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetWidgetCommonProperties(c
 	ResultObj->SetBoolField(TEXT("success"), true);
 	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
 	ResultObj->SetStringField(TEXT("widget_name"), Widget->GetName());
-	ResultObj->SetStringField(TEXT("widget_class"), Widget->GetClass()->GetName());
-	ResultObj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
-	ResultObj->SetBoolField(TEXT("is_enabled"), Widget->GetIsEnabled());
-	ResultObj->SetBoolField(TEXT("is_variable"), Widget->bIsVariable);
+	FillWidgetCommonPropertiesReadback(ResultObj, Widget);
+	return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetWidgetCommonPropertiesBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlueprintName;
+	if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* ItemsPtr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("items"), ItemsPtr) || !ItemsPtr || ItemsPtr->Num() == 0)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing or empty 'items' parameter"));
+	}
+
+	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
+	if (!WidgetBlueprint || !WidgetBlueprint->WidgetTree)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Widget Blueprint not found or invalid: %s"), *BlueprintName));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(ItemsPtr->Num());
+
+	for (int32 ItemIndex = 0; ItemIndex < ItemsPtr->Num(); ++ItemIndex)
+	{
+		const TSharedPtr<FJsonObject>* ItemObjPtr = nullptr;
+		if (!(*ItemsPtr)[ItemIndex].IsValid() || !(*ItemsPtr)[ItemIndex]->TryGetObject(ItemObjPtr) || !ItemObjPtr || !ItemObjPtr->IsValid())
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] is not a valid object"), ItemIndex));
+		}
+
+		const TSharedPtr<FJsonObject>& ItemObj = *ItemObjPtr;
+		FString WidgetName;
+		if (!ItemObj->TryGetStringField(TEXT("widget_name"), WidgetName))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] missing 'widget_name'"), ItemIndex));
+		}
+
+		UWidget* Widget = WidgetBlueprint->WidgetTree->FindWidget(*WidgetName);
+		if (!Widget)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+		}
+
+		FString ApplyError;
+		if (!ApplyWidgetCommonPropertiesFields(ItemObj, Widget, ApplyError))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("items[%d] apply failed: %s"), ItemIndex, *ApplyError));
+		}
+
+		TSharedPtr<FJsonObject> ItemResult = MakeShared<FJsonObject>();
+		ItemResult->SetNumberField(TEXT("index"), ItemIndex);
+		ItemResult->SetStringField(TEXT("widget_name"), Widget->GetName());
+		FillWidgetCommonPropertiesReadback(ItemResult, Widget);
+		Results.Add(MakeShared<FJsonValueObject>(ItemResult));
+	}
+
+	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
+
+	TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
+	ResultObj->SetBoolField(TEXT("success"), true);
+	ResultObj->SetStringField(TEXT("blueprint_name"), BlueprintName);
+	ResultObj->SetStringField(TEXT("asset_path"), GetWidgetBlueprintSavePath(WidgetBlueprint));
+	ResultObj->SetNumberField(TEXT("updated_count"), Results.Num());
+	ResultObj->SetArrayField(TEXT("results"), Results);
 	return ResultObj;
 }
 

@@ -671,6 +671,40 @@ def register_umg_tools(mcp: FastMCP):
             return {"success": False, "message": error_msg}
 
     @mcp.tool()
+    def set_widget_common_properties_batch(
+        ctx: Context,
+        blueprint_name: str,
+        items: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Batch-set common UWidget properties (visibility/is_enabled) for multiple widgets.
+
+        Args:
+            blueprint_name: Name or asset path of the target Widget Blueprint
+            items: Array of per-widget objects with widget_name and optional visibility/is_enabled
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            params = {
+                "blueprint_name": blueprint_name,
+                "items": items,
+            }
+
+            logger.info(f"Setting widget common properties batch with {len(items)} items on {blueprint_name}")
+            response = unreal.send_command("set_widget_common_properties_batch", params)
+            return response or {"success": False, "message": "No response from Unreal Engine"}
+        except Exception as e:
+            error_msg = f"Error setting widget common properties batch: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
     def set_text_block_properties(
         ctx: Context,
         blueprint_name: str,

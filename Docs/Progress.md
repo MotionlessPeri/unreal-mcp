@@ -12,7 +12,15 @@
 
 ## Completed
 
-1. `spawn_actor` command enhancement (2026-02-24):
+1. `set_actor_property` struct support (2026-02-24):
+   - extended `SetObjectProperty` to support struct properties.
+   - added support for `FLinearColor` (used for colors like Route PointColor).
+   - added support for `FVector` (accepts object or array format).
+   - added support for `FRotator` (accepts object or array format).
+   - uses `TBaseStructure<T>::Get()` for type comparison.
+   - uses `CopyCompleteValue` for safe struct assignment.
+   - enables setting struct properties via `set_actor_property` command.
+2. `spawn_actor` command enhancement (2026-02-24):
    - extended to support arbitrary Actor classes via class path (e.g., `/Script/AIPoint.AIPointInstance`).
    - maintains backward compatibility with built-in types (`StaticMeshActor`, `PointLight`, etc.).
    - uses `FindObject<UClass>` and `StaticLoadClass` for dynamic class resolution.

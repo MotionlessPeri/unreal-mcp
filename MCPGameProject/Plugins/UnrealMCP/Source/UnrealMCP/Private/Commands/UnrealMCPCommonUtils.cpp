@@ -910,8 +910,98 @@ bool FUnrealMCPCommonUtils::SetObjectProperty(UObject* Object, const FString& Pr
             }
         }
     }
-    
-    OutErrorMessage = FString::Printf(TEXT("Unsupported property type: %s for property %s"), 
+    else if (FStructProperty* StructProp = CastField<FStructProperty>(Property))
+    {
+        // Handle struct properties (e.g., FLinearColor, FVector, FRotator)
+        UScriptStruct* Struct = StructProp->Struct;
+
+        if (Struct == TBaseStructure<FLinearColor>::Get())
+        {
+            // Handle FLinearColor from JSON object
+            if (Value->Type == EJson::Object)
+            {
+                const TSharedPtr<FJsonObject>& JsonObj = Value->AsObject();
+                FLinearColor Color;
+
+                Color.R = JsonObj->GetNumberField(TEXT("R"));
+                Color.G = JsonObj->GetNumberField(TEXT("G"));
+                Color.B = JsonObj->GetNumberField(TEXT("B"));
+                Color.A = JsonObj->HasField(TEXT("A")) ? JsonObj->GetNumberField(TEXT("A")) : 1.0f;
+
+                StructProp->CopyCompleteValue(PropertyAddr, &Color);
+
+                UE_LOG(LogTemp, Display, TEXT("Setting FLinearColor property %s to RGBA(%.2f, %.2f, %.2f, %.2f)"),
+                      *PropertyName, Color.R, Color.G, Color.B, Color.A);
+                return true;
+            }
+        }
+        else if (Struct == TBaseStructure<FVector>::Get())
+        {
+            // Handle FVector from JSON object or array
+            if (Value->Type == EJson::Object)
+            {
+                const TSharedPtr<FJsonObject>& JsonObj = Value->AsObject();
+                FVector Vec;
+
+                Vec.X = JsonObj->GetNumberField(TEXT("X"));
+                Vec.Y = JsonObj->GetNumberField(TEXT("Y"));
+                Vec.Z = JsonObj->GetNumberField(TEXT("Z"));
+
+                StructProp->CopyCompleteValue(PropertyAddr, &Vec);
+                return true;
+            }
+            else if (Value->Type == EJson::Array)
+            {
+                const TArray<TSharedPtr<FJsonValue>>& JsonArray = Value->AsArray();
+                if (JsonArray.Num() >= 3)
+                {
+                    FVector Vec;
+                    Vec.X = JsonArray[0]->AsNumber();
+                    Vec.Y = JsonArray[1]->AsNumber();
+                    Vec.Z = JsonArray[2]->AsNumber();
+
+                    StructProp->CopyCompleteValue(PropertyAddr, &Vec);
+                    return true;
+                }
+            }
+        }
+        else if (Struct == TBaseStructure<FRotator>::Get())
+        {
+            // Handle FRotator from JSON object or array
+            if (Value->Type == EJson::Object)
+            {
+                const TSharedPtr<FJsonObject>& JsonObj = Value->AsObject();
+                FRotator Rot;
+
+                Rot.Pitch = JsonObj->GetNumberField(TEXT("Pitch"));
+                Rot.Yaw = JsonObj->GetNumberField(TEXT("Yaw"));
+                Rot.Roll = JsonObj->GetNumberField(TEXT("Roll"));
+
+                StructProp->CopyCompleteValue(PropertyAddr, &Rot);
+                return true;
+            }
+            else if (Value->Type == EJson::Array)
+            {
+                const TArray<TSharedPtr<FJsonValue>>& JsonArray = Value->AsArray();
+                if (JsonArray.Num() >= 3)
+                {
+                    FRotator Rot;
+                    Rot.Pitch = JsonArray[0]->AsNumber();
+                    Rot.Yaw = JsonArray[1]->AsNumber();
+                    Rot.Roll = JsonArray[2]->AsNumber();
+
+                    StructProp->CopyCompleteValue(PropertyAddr, &Rot);
+                    return true;
+                }
+            }
+        }
+
+        OutErrorMessage = FString::Printf(TEXT("Unsupported struct type: %s for property %s"),
+                                        *Struct->GetName(), *PropertyName);
+        return false;
+    }
+
+    OutErrorMessage = FString::Printf(TEXT("Unsupported property type: %s for property %s"),
                                     *Property->GetClass()->GetName(), *PropertyName);
     return false;
 } 

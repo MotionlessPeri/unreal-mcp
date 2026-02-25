@@ -221,6 +221,17 @@
      - create probe widget with three `TextBlock` children
      - batch-apply text + RGBA color values
      - verify per-item readback (`text`, `color`) values in response.
+27. Composite smoke (full DebugBoard skeleton via existing primitives) completed:
+   - added `Python/scripts/umg_full_debugboard_skeleton_smoke.py`.
+   - smoke composes current Route B primitives + batch helpers to build a full 9x10 debug-board skeleton:
+     - `RootCanvas`
+     - `BoardGrid` (`UniformGridPanel`) + `SidePanel` (`VerticalBox`) with canvas batch layout
+     - 90 board cells via `add_widget_child_batch`
+     - 90 grid slot assignments via `set_uniform_grid_slot_batch`
+     - side-panel status texts + buttons + button labels
+     - batch text/common-property updates and widget-tree readback validation
+   - validated on consumer `StupidChessUE`; command chain passes end-to-end and confirms `cell_count=90`.
+   - operational note: one run under regular D3D12 editor UI crashed in render thread during compile/save (`D3D12RHI` callstack, not MCP command error). Re-running under `-NullRHI` completed successfully; keep `-NullRHI` in mind for heavy automation smoke runs.
 
 ## In Progress
 
@@ -317,8 +328,8 @@ Route B Follow-up (2026-02-24): Full-board batch child creation unblock
 4. Add CI-friendly command smoke entrypoint for consumer-side pre-sync validation.
 5. Document known limitations for editor lifecycle commands (PIE / prompts / debugger attach / remaining dirty-package counts after save attempts).
 6. Evaluate whether generic asset cleanup should be promoted beyond UMG-specific cleanup (cross-tooling ergonomics).
-7. Evaluate next batch helper (`set_text_block_properties_batch`) based on DebugBoard status-panel command pressure.
-8. Evaluate deferred compile/save transaction mode (post-`add_widget_child_batch`) for even larger composite builds and lower editor churn.
+7. Evaluate deferred compile/save transaction mode (post-`add_widget_child_batch`) for even larger composite builds and lower editor churn.
+8. Consider template/helper layer for repeatable consumer UI skeleton generation now that full DebugBoard skeleton composition smoke passes.
 
 ## Validation Baseline
 

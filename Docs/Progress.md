@@ -5,6 +5,7 @@
 1. 2026-02-19
 2. 2026-02-23
 3. 2026-02-24 (behavior tree read support + blueprint graph read support)
+4. 2026-02-25 (bt decorator details + blackboard key list + plugin-path blueprint lookup fix)
 
 ## Current Milestone
 
@@ -12,7 +13,16 @@
 
 ## Completed
 
-1. `get_blueprint_graph_info` command (2026-02-24):
+1. `get_behavior_tree_info` decorator + blackboard key enhancements (2026-02-25):
+   - `SerializeDecorator` now returns `description` (engine-generated human-readable text, e.g. `"( aborts both )\nBlackboard: HasTarget is Is Set"`), `flow_abort_mode` (None / Self / LowerPriority / Both), and `bb_key` (selected blackboard key name for `BTDecorator_Blackboard` and subclasses).
+   - `FlowAbortMode` and `BlackboardKey.SelectedKeyName` are protected fields; accessed via UE property reflection (`FindFProperty` + `GetPropertyValue_InContainer`).
+   - `get_behavior_tree_info` now also returns `blackboard_keys`: array of `{name, type}` for every key in the `UBlackboardData` asset, including inherited keys from the parent chain.
+   - new include: `BehaviorTree/Decorators/BTDecorator_BlackboardBase.h`.
+2. `FindBlueprintByName` asset-registry scope fix (2026-02-25):
+   - removed `PackagePaths.Add(FName(TEXT("/Game")))` filter from the fallback `FARFilter` in `UnrealMCPCommonUtils::FindBlueprintByName`.
+   - now searches all registered asset paths including plugin content (e.g. `/AIPoint/BTTask_WriteBackToPatrol`).
+   - fixes "Blueprint not found" error for blueprints that live outside `/Game/`.
+3. `get_blueprint_graph_info` command (2026-02-24):
    - new read command to dump a Blueprint's node graph including pin connections (edges).
    - accepts `blueprint_name` (name-based lookup, same as existing commands) and optional `graph_name` (default "EventGraph").
    - searches UbergraphPages, FunctionGraphs, and MacroGraphs; returns `available_graphs` on miss.

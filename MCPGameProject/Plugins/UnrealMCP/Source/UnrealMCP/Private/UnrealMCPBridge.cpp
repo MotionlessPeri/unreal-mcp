@@ -260,7 +260,13 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
             }
             // Blueprint Node Commands
             else if (CommandType == TEXT("connect_blueprint_nodes") || 
+                     CommandType == TEXT("disconnect_blueprint_nodes") ||
                      CommandType == TEXT("break_blueprint_node_pin_links") ||
+                     CommandType == TEXT("move_blueprint_node") ||
+                     CommandType == TEXT("move_blueprint_nodes") ||
+                     CommandType == TEXT("delete_blueprint_node") ||
+                     CommandType == TEXT("delete_blueprint_nodes") ||
+                     CommandType == TEXT("set_blueprint_node_pin_default") ||
                      CommandType == TEXT("clear_blueprint_event_exec_chain") ||
                      CommandType == TEXT("dedupe_blueprint_component_bound_events") ||
                      CommandType == TEXT("add_blueprint_get_self_component_reference") ||
@@ -276,7 +282,10 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("add_blueprint_function_node") ||
                      CommandType == TEXT("add_blueprint_get_component_node") ||
                      CommandType == TEXT("add_blueprint_variable") ||
-                     CommandType == TEXT("get_blueprint_graph_info"))
+                     CommandType == TEXT("get_blueprint_graph_info") ||
+                     CommandType == TEXT("add_blueprint_branch_node") ||
+                     CommandType == TEXT("add_blueprint_switch_enum_node") ||
+                     CommandType == TEXT("add_blueprint_array_get_node"))
             {
                 ResultJson = BlueprintNodeCommands->HandleCommand(CommandType, Params);
             }

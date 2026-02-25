@@ -117,6 +117,96 @@ Connect two nodes in a Blueprint's event graph.
 }
 ```
 
+### disconnect_blueprint_nodes
+
+Disconnect one specific link between two node pins.
+
+**Parameters:**
+- `blueprint_name` (string) - Name/path of the target Blueprint
+- `source_node_id` (string) - Source node GUID
+- `source_pin` (string) - Source pin name
+- `target_node_id` (string) - Target node GUID
+- `target_pin` (string) - Target pin name
+- `graph_name` (string, optional) - Graph name (`EventGraph`, function graph, macro graph). Default `EventGraph`
+
+**Returns:**
+- Response containing the disconnected edge identifiers
+
+### move_blueprint_node
+
+Move one graph node to an absolute position.
+
+**Parameters:**
+- `blueprint_name` (string) - Name/path of the target Blueprint
+- `node_id` (string) - Node GUID to move
+- `node_position` (array[number]) - Absolute graph position `[X, Y]`
+- `graph_name` (string, optional) - Graph name. Default `EventGraph`
+
+**Returns:**
+- Response containing `node_id`, `x`, and `y`
+
+### move_blueprint_nodes
+
+Move multiple graph nodes to absolute positions.
+
+**Parameters:**
+- `blueprint_name` (string) - Name/path of the target Blueprint
+- `moves` (array[object]) - Each object has:
+- `node_id` (string) - Node GUID
+- `node_position` (array[number]) - Absolute graph position `[X, Y]`
+- `graph_name` (string, optional) - Graph name. Default `EventGraph`
+
+**Returns:**
+- `moved_nodes` with resolved positions
+- `missing_node_ids` / `invalid_entries`
+- `moved_count` / `missing_count` / `invalid_count`
+
+### delete_blueprint_node
+
+Delete one graph node by node GUID.
+
+**Parameters:**
+- `blueprint_name` (string) - Name/path of the target Blueprint
+- `node_id` (string) - Node GUID to delete
+- `graph_name` (string, optional) - Graph name. Default `EventGraph`
+
+**Returns:**
+- Response indicating the deleted node
+
+### delete_blueprint_nodes
+
+Delete multiple graph nodes by node GUID.
+
+**Parameters:**
+- `blueprint_name` (string) - Name/path of the target Blueprint
+- `node_ids` (array[string]) - Node GUIDs to delete
+- `graph_name` (string, optional) - Graph name. Default `EventGraph`
+
+**Returns:**
+- `deleted_node_ids` / `missing_node_ids`
+- `deleted_count` / `missing_count`
+
+### set_blueprint_node_pin_default
+
+Set an input pin default value on a node.
+
+**Parameters:**
+- `blueprint_name` (string) - Name/path of the target Blueprint
+- `node_id` (string) - Node GUID
+- `pin_name` (string) - Input pin name
+- `value` (any) - New default value
+- `graph_name` (string, optional) - Graph name. Default `EventGraph`
+
+**Supported value shapes:**
+- `string`, `number`, `boolean`, `null`
+- `[x, y, z]` for `FVector` / `FRotator` pins
+- `{"X":...,"Y":...,"Z":...}` for `FVector`
+- `{"Pitch":...,"Yaw":...,"Roll":...}` for `FRotator`
+- `{"object_path":"..."}` for object/class-like pins where schema supports object defaults
+
+**Returns:**
+- Response containing `node_id`, `pin_name`, resolved `default_value`, and `has_links`
+
 ### add_blueprint_variable
 
 Add a variable to a Blueprint.
@@ -240,6 +330,13 @@ Find nodes in a Blueprint's event graph.
 ```
 
 ## Error Handling
+
+Notes:
+- `break_blueprint_node_pin_links` now also accepts optional `graph_name` (default `EventGraph`) for function/macro graph usage.
+- Commands that edit graphs by GUID assume the `node_id` came from `get_blueprint_graph_info` on the same graph.
+- `get_blueprint_graph_info` now also returns layout metadata for formatting tools:
+  - per-node `width`, `height`, `size_source`
+  - graph-level `overlaps`, `overlap_pair_count`, `overlap_node_count`
 
 All command responses include a "success" field indicating whether the operation succeeded, and an optional "message" field with details in case of failure.
 

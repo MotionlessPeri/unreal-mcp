@@ -6,12 +6,41 @@
 2. 2026-02-23
 3. 2026-02-24 (behavior tree read support + blueprint graph read support)
 4. 2026-02-25 (bt decorator details + blackboard key list + plugin-path blueprint lookup fix)
+5. 2026-02-25 (blueprint node precise delete/disconnect/pin-default commands)
+6. 2026-02-25 (blueprint node move commands for layout cleanup)
+7. 2026-02-25 (blueprint graph size/overlap metadata for layout tooling)
 
 ## Current Milestone
 
 1. Stabilize blueprint graph automation for consumer projects (`StupidChess` as first consumer).
 
 ## Completed
+
+1. `get_blueprint_graph_info` layout metadata enhancement (2026-02-25):
+   - each serialized node now includes `width`, `height`, and `size_source` (`cached` from `NodeWidth/NodeHeight` if available, otherwise `estimated` fallback).
+   - command response now includes overlap analysis for external formatters:
+     - `overlaps` (pairwise overlap entries with overlap rect + both node bounds)
+     - `overlap_pair_count`
+     - `overlap_node_count`
+   - intended for external layout/beautify scripts to detect and resolve node collisions without re-querying node geometry in-editor.
+
+1. Blueprint graph node move commands (2026-02-25):
+   - added `move_blueprint_node` (single node absolute position by GUID).
+   - added `move_blueprint_nodes` (batch absolute positions by GUID).
+   - supports optional `graph_name` (default `EventGraph`) for function/macro graph layout edits.
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/node_tools.py`, documented in `Docs/Tools/node_tools.md`.
+
+1. Blueprint graph precise edit commands for node cleanup / pin-defaulting (2026-02-25):
+   - added `disconnect_blueprint_nodes` to remove one specific link between two node pins.
+   - added `delete_blueprint_node` and `delete_blueprint_nodes` (single/batch by node GUID).
+   - added `set_blueprint_node_pin_default` for input-pin default values (string/number/bool/null, FVector/FRotator arrays/maps, class/object-path where supported).
+   - new commands accept optional `graph_name` (default `EventGraph`) so function/macro graph edits are supported.
+   - extended `break_blueprint_node_pin_links` to accept optional `graph_name`.
+   - routed via `UnrealMCPBridge`, exposed in `Python/tools/node_tools.py`, documented in `Docs/Tools/node_tools.md`.
+   - also fixed dispatcher routing for existing node commands already implemented in C++/Python but missing bridge registration:
+     - `add_blueprint_branch_node`
+     - `add_blueprint_switch_enum_node`
+     - `add_blueprint_array_get_node`
 
 1. `get_behavior_tree_info` decorator + blackboard key enhancements (2026-02-25):
    - `SerializeDecorator` now returns `description` (engine-generated human-readable text, e.g. `"( aborts both )\nBlackboard: HasTarget is Is Set"`), `flow_abort_mode` (None / Self / LowerPriority / Both), and `bb_key` (selected blackboard key name for `BTDecorator_Blackboard` and subclasses).

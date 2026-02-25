@@ -4,7 +4,7 @@
 
 1. 2026-02-19
 2. 2026-02-23
-3. 2026-02-24
+3. 2026-02-24 (behavior tree read support + blueprint graph read support)
 
 ## Current Milestone
 
@@ -12,7 +12,25 @@
 
 ## Completed
 
-1. `set_actor_property` struct support (2026-02-24):
+1. `get_blueprint_graph_info` command (2026-02-24):
+   - new read command to dump a Blueprint's node graph including pin connections (edges).
+   - accepts `blueprint_name` (name-based lookup, same as existing commands) and optional `graph_name` (default "EventGraph").
+   - searches UbergraphPages, FunctionGraphs, and MacroGraphs; returns `available_graphs` on miss.
+   - each node entry includes: `node_id` (GUID), `node_class`, `title`, canvas position, and extra fields for CallFunction (`function_name`), Event/CustomEvent (`event_name`), DynamicCast (`cast_target`).
+   - each pin entry (exec or connected-only) includes `pin_name`, `direction`, `pin_type`, and `connected_to` list of `{node_id, pin_name}`.
+   - implemented in `FUnrealMCPBlueprintNodeCommands::HandleGetBlueprintGraphInfo`.
+   - routed in `UnrealMCPBridge`, exposed in `Python/tools/blueprint_tools.py`.
+   - no new module dependencies required (all existing includes cover it).
+2. `get_behavior_tree_info` command (2026-02-24):
+   - new command to read BehaviorTree asset structure via MCP.
+   - loads `UBehaviorTree` asset via `UEditorAssetLibrary::LoadAsset`.
+   - recursively serializes the node tree: Composite (Sequence/Selector), Task, Decorator, Service.
+   - returns asset name, blackboard path, and the full node hierarchy as JSON.
+   - new C++ handler class: `FUnrealMCPBehaviorTreeCommands`.
+   - added `AIModule` and `GameplayTasks` to `PublicDependencyModuleNames` in `UnrealMCP.Build.cs`.
+   - routed in `UnrealMCPBridge`, exposed in `Python/tools/behavior_tree_tools.py`.
+   - registered in `unreal_mcp_server.py`.
+2. `set_actor_property` struct support (2026-02-24):
    - extended `SetObjectProperty` to support struct properties.
    - added support for `FLinearColor` (used for colors like Route PointColor).
    - added support for `FVector` (accepts object or array format).

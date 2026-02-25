@@ -294,7 +294,11 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleCommand(const FSt
     {
         return HandleClearBlueprintEventGraph(Params);
     }
-    
+    else if (CommandType == TEXT("get_blueprint_graph_info"))
+    {
+        return HandleGetBlueprintGraphInfo(Params);
+    }
+
     return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown blueprint node command: %s"), *CommandType));
 }
 
@@ -2026,4 +2030,145 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleClearBlueprintEve
     ResultObj->SetNumberField(TEXT("removed_count"), RemovedCount);
     ResultObj->SetNumberField(TEXT("kept_count"), KeptCount);
     return ResultObj;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleGetBlueprintGraphInfo(const TSharedPtr<FJsonObject>& Params)
+{
+    // --- Parameters ---
+    FString BlueprintName;
+    if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+    }
+
+    FString GraphName = TEXT("EventGraph");
+    Params->TryGetStringField(TEXT("graph_name"), GraphName);
+
+    // --- Load blueprint ---
+    UBlueprint* Blueprint = FUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
+    if (!Blueprint)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
+    }
+
+    // --- Find target graph, collect available graph names ---
+    UEdGraph* TargetGraph = nullptr;
+    TArray<TSharedPtr<FJsonValue>> AvailableGraphsArr;
+
+    auto SearchGraphs = [&](const TArray<UEdGraph*>& Graphs)
+    {
+        for (UEdGraph* Graph : Graphs)
+        {
+            if (!Graph) continue;
+            AvailableGraphsArr.Add(MakeShared<FJsonValueString>(Graph->GetName()));
+            if (Graph->GetName() == GraphName)
+            {
+                TargetGraph = Graph;
+            }
+        }
+    };
+
+    SearchGraphs(Blueprint->UbergraphPages);   // EventGraph / ubergraph
+    SearchGraphs(Blueprint->FunctionGraphs);   // custom functions
+    SearchGraphs(Blueprint->MacroGraphs);      // macros
+
+    if (!TargetGraph)
+    {
+        TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
+        ErrObj->SetBoolField(TEXT("success"), false);
+        ErrObj->SetStringField(TEXT("error"),
+            FString::Printf(TEXT("Graph '%s' not found in blueprint '%s'"), *GraphName, *BlueprintName));
+        ErrObj->SetArrayField(TEXT("available_graphs"), AvailableGraphsArr);
+        return ErrObj;
+    }
+
+    // --- Serialize all nodes ---
+    TArray<TSharedPtr<FJsonValue>> NodesArr;
+
+    for (UEdGraphNode* Node : TargetGraph->Nodes)
+    {
+        if (!Node) continue;
+
+        TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+        NodeObj->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString());
+        NodeObj->SetStringField(TEXT("node_class"), Node->GetClass()->GetName());
+        NodeObj->SetStringField(TEXT("title"),
+            Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+        NodeObj->SetNumberField(TEXT("x"), Node->NodePosX);
+        NodeObj->SetNumberField(TEXT("y"), Node->NodePosY);
+
+        // Extra info for well-known node types
+        if (UK2Node_CallFunction* CallFunc = Cast<UK2Node_CallFunction>(Node))
+        {
+            NodeObj->SetStringField(TEXT("function_name"),
+                CallFunc->GetFunctionName().ToString());
+        }
+        else if (UK2Node_Event* EventNode = Cast<UK2Node_Event>(Node))
+        {
+            NodeObj->SetStringField(TEXT("event_name"),
+                EventNode->GetFunctionName().ToString());
+        }
+        else if (UK2Node_CustomEvent* CustomEvent = Cast<UK2Node_CustomEvent>(Node))
+        {
+            NodeObj->SetStringField(TEXT("event_name"),
+                CustomEvent->GetFunctionName().ToString());
+        }
+        else if (UK2Node_DynamicCast* CastNode = Cast<UK2Node_DynamicCast>(Node))
+        {
+            if (CastNode->TargetType)
+            {
+                NodeObj->SetStringField(TEXT("cast_target"),
+                    CastNode->TargetType->GetName());
+            }
+        }
+
+        // --- Pins ---
+        TArray<TSharedPtr<FJsonValue>> PinsArr;
+
+        for (UEdGraphPin* Pin : Node->Pins)
+        {
+            if (!Pin || Pin->bHidden) continue;
+
+            TSharedPtr<FJsonObject> PinObj = MakeShared<FJsonObject>();
+            PinObj->SetStringField(TEXT("pin_name"), Pin->PinName.ToString());
+            PinObj->SetStringField(TEXT("direction"),
+                Pin->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
+            PinObj->SetStringField(TEXT("pin_type"),
+                Pin->PinType.PinCategory.ToString());
+
+            // Connections
+            TArray<TSharedPtr<FJsonValue>> ConnsArr;
+            for (UEdGraphPin* LinkedPin : Pin->LinkedTo)
+            {
+                if (!LinkedPin || !LinkedPin->GetOwningNode()) continue;
+                TSharedPtr<FJsonObject> ConnObj = MakeShared<FJsonObject>();
+                ConnObj->SetStringField(TEXT("node_id"),
+                    LinkedPin->GetOwningNode()->NodeGuid.ToString());
+                ConnObj->SetStringField(TEXT("pin_name"),
+                    LinkedPin->PinName.ToString());
+                ConnsArr.Add(MakeShared<FJsonValueObject>(ConnObj));
+            }
+            PinObj->SetArrayField(TEXT("connected_to"), ConnsArr);
+
+            // Only include pins that have connections or are exec pins (to keep output readable)
+            if (ConnsArr.Num() > 0 || Pin->PinType.PinCategory == TEXT("exec"))
+            {
+                PinsArr.Add(MakeShared<FJsonValueObject>(PinObj));
+            }
+        }
+
+        NodeObj->SetArrayField(TEXT("pins"), PinsArr);
+        NodesArr.Add(MakeShared<FJsonValueObject>(NodeObj));
+    }
+
+    // --- Result ---
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("blueprint_name"), BlueprintName);
+    Result->SetStringField(TEXT("graph_name"), GraphName);
+    Result->SetArrayField(TEXT("available_graphs"), AvailableGraphsArr);
+    Result->SetNumberField(TEXT("node_count"), NodesArr.Num());
+    Result->SetArrayField(TEXT("nodes"), NodesArr);
+    return Result;
 }

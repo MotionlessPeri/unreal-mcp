@@ -275,7 +275,7 @@ UBlueprint* FUnrealMCPCommonUtils::FindBlueprintByName(const FString& BlueprintN
 
     FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
     FARFilter Filter;
-    Filter.PackagePaths.Add(FName(TEXT("/Game")));
+    // No PackagePaths filter: search all paths including plugin content (e.g. /AIPoint/, /Game/, etc.)
     Filter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
     Filter.bRecursivePaths = true;
     Filter.bRecursiveClasses = true;

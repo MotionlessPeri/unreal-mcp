@@ -50,3 +50,17 @@ Run relevant checks before shipping a change:
 2. Python layer import/start smoke test:
    - `python Python/unreal_mcp_server.py` (or project venv equivalent)
 3. For blueprint graph commands, validate against a real test asset and check UE logs for compile errors.
+
+## Autonomous Editor Lifecycle
+
+When plugin code changes require a rebuild, the agent may autonomously:
+
+1. Call `save_and_exit_editor` via MCP to save and close the Editor.
+2. Run the cold rebuild (use `-FromMSBuild` flag, not `-NoHotReloadFromIDE`):
+   `Build.bat <Project>Editor Win64 Development -Project="<uproject>" -WaitMutex -FromMSBuild`
+3. Restart the Editor: `start "" UnrealEditor.exe "<uproject>"`
+4. Wait for MCP reconnection and continue.
+
+Stop and report to the user only when:
+- Editor is unresponsive (MCP retries exhausted beyond Perforce-blocked window).
+- Editor process crashes or disappears unexpectedly.

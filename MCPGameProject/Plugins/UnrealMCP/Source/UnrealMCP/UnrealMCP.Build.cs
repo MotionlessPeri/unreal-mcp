@@ -34,7 +34,9 @@ public class UnrealMCP : ModuleRules
 				"HTTP",
 				"Json",
 				"JsonUtilities",
-				"DeveloperSettings"
+				"DeveloperSettings",
+				"AIModule",       // UBehaviorTree, UBTCompositeNode, UBTTaskNode, etc.
+				"GameplayTasks"   // Required by AIModule
 			}
 		);
 		

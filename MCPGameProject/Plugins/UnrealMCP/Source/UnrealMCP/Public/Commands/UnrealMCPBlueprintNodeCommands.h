@@ -32,4 +32,5 @@ private:
     TSharedPtr<FJsonObject> HandleBindBlueprintMulticastDelegate(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleFindBlueprintNodes(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleClearBlueprintEventGraph(const TSharedPtr<FJsonObject>& Params);
-}; 
+    TSharedPtr<FJsonObject> HandleGetBlueprintGraphInfo(const TSharedPtr<FJsonObject>& Params);
+};

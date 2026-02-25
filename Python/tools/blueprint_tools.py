@@ -417,4 +417,74 @@ def register_blueprint_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
     
-    logger.info("Blueprint tools registered successfully") 
+    @mcp.tool()
+    def get_blueprint_graph_info(
+        ctx: Context,
+        blueprint_name: str,
+        graph_name: str = "EventGraph",
+    ) -> Dict[str, Any]:
+        """
+        Read the node graph of a Blueprint, including all pin connections (edges).
+
+        Returns every non-hidden node in the requested graph with its class,
+        title, position, and the connections on its exec/data pins.
+
+        Args:
+            blueprint_name: Asset name of the Blueprint (e.g. "BTTask_WriteBackToPatrol",
+                            "BP_Test"). Name-based lookup, same as other blueprint commands.
+            graph_name: Name of the graph to read. Defaults to "EventGraph".
+                        Pass "available_graphs" in the error response to discover
+                        other graph names (functions, macros, etc.).
+
+        Returns:
+            Dict with fields:
+              - success (bool)
+              - blueprint_name (str)
+              - graph_name (str)
+              - available_graphs (list[str])   -- all graphs in this blueprint
+              - node_count (int)
+              - nodes (list[dict]) where each node has:
+                  - node_id (str)           -- stable GUID string
+                  - node_class (str)        -- C++ class, e.g. "K2Node_CallFunction"
+                  - title (str)             -- display title shown in editor
+                  - x, y (float)            -- canvas position
+                  - function_name (str)     -- only for CallFunction nodes
+                  - event_name (str)        -- only for Event / CustomEvent nodes
+                  - cast_target (str)       -- only for DynamicCast nodes
+                  - pins (list[dict]):
+                      - pin_name (str)
+                      - direction (str)     -- "input" | "output"
+                      - pin_type (str)      -- "exec", "bool", "object", etc.
+                      - connected_to (list[{node_id, pin_name}])
+
+        Example:
+            get_blueprint_graph_info("BTTask_WriteBackToPatrol")
+            get_blueprint_graph_info("BP_Test", graph_name="EventGraph")
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            response = unreal.send_command("get_blueprint_graph_info", {
+                "blueprint_name": blueprint_name,
+                "graph_name": graph_name,
+            })
+
+            if not response:
+                logger.error("No response from Unreal Engine")
+                return {"success": False, "message": "No response from Unreal Engine"}
+
+            logger.info(f"get_blueprint_graph_info response node_count="
+                        f"{response.get('result', {}).get('node_count', '?')}")
+            return response
+
+        except Exception as e:
+            error_msg = f"Error getting blueprint graph info: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    logger.info("Blueprint tools registered successfully")

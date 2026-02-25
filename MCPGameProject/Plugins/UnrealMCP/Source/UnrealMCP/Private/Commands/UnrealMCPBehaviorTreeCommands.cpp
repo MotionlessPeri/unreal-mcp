@@ -7,6 +7,8 @@
 #include "BehaviorTree/BTDecorator.h"
 #include "BehaviorTree/BTService.h"
 #include "BehaviorTree/BlackboardData.h"
+#include "BehaviorTree/Decorators/BTDecorator_BlackboardBase.h"
+#include "BehaviorTree/BehaviorTreeTypes.h"
 
 FUnrealMCPBehaviorTreeCommands::FUnrealMCPBehaviorTreeCommands()
 {
@@ -57,14 +59,30 @@ TSharedPtr<FJsonObject> FUnrealMCPBehaviorTreeCommands::HandleGetBehaviorTreeInf
     Result->SetStringField(TEXT("asset_path"), AssetPath);
     Result->SetStringField(TEXT("asset_name"), BT->GetName());
 
-    // Blackboard asset name (if any)
+    // Blackboard asset + inline key list
     if (BT->BlackboardAsset)
     {
         Result->SetStringField(TEXT("blackboard"), BT->BlackboardAsset->GetPathName());
+
+        TArray<TSharedPtr<FJsonValue>> KeysArr;
+        // Traverse parent chain so inherited keys are included
+        for (UBlackboardData* BD = BT->BlackboardAsset; BD != nullptr; BD = BD->Parent)
+        {
+            for (const FBlackboardEntry& Entry : BD->Keys)
+            {
+                TSharedPtr<FJsonObject> KeyObj = MakeShared<FJsonObject>();
+                KeyObj->SetStringField(TEXT("name"), Entry.EntryName.ToString());
+                KeyObj->SetStringField(TEXT("type"),
+                    Entry.KeyType ? Entry.KeyType->GetClass()->GetName() : TEXT("Unknown"));
+                KeysArr.Add(MakeShared<FJsonValueObject>(KeyObj));
+            }
+        }
+        Result->SetArrayField(TEXT("blackboard_keys"), KeysArr);
     }
     else
     {
         Result->SetStringField(TEXT("blackboard"), TEXT(""));
+        Result->SetArrayField(TEXT("blackboard_keys"), TArray<TSharedPtr<FJsonValue>>());
     }
 
     // Root node
@@ -152,6 +170,41 @@ TSharedPtr<FJsonObject> FUnrealMCPBehaviorTreeCommands::SerializeDecorator(UBTDe
     Obj->SetStringField(TEXT("node_type"), TEXT("Decorator"));
     Obj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
     Obj->SetStringField(TEXT("name"), Node->GetNodeName());
+
+    // Human-readable description (includes key + condition for BBDecorators)
+    FString Desc = Node->GetStaticDescription();
+    if (!Desc.IsEmpty())
+    {
+        Obj->SetStringField(TEXT("description"), Desc);
+    }
+
+    // FlowAbortMode is protected — access via UE reflection
+    if (FByteProperty* FlowAbortProp = FindFProperty<FByteProperty>(Node->GetClass(), TEXT("FlowAbortMode")))
+    {
+        uint8 AbortVal = FlowAbortProp->GetPropertyValue_InContainer(Node);
+        static const TCHAR* AbortModeNames[] = {TEXT("None"), TEXT("Self"), TEXT("LowerPriority"), TEXT("Both")};
+        if (AbortVal <= 3)
+        {
+            Obj->SetStringField(TEXT("flow_abort_mode"), AbortModeNames[AbortVal]);
+        }
+    }
+
+    // BlackboardKey.SelectedKeyName is protected on BlackboardBase — access via reflection
+    if (UBTDecorator_BlackboardBase* BBBase = Cast<UBTDecorator_BlackboardBase>(Node))
+    {
+        if (FStructProperty* KeySelectorProp = FindFProperty<FStructProperty>(
+            UBTDecorator_BlackboardBase::StaticClass(), TEXT("BlackboardKey")))
+        {
+            const uint8* KeySelectorData = KeySelectorProp->ContainerPtrToValuePtr<uint8>(BBBase);
+            if (FNameProperty* NameProp = FindFProperty<FNameProperty>(
+                KeySelectorProp->Struct, TEXT("SelectedKeyName")))
+            {
+                FName KeyName = NameProp->GetPropertyValue_InContainer(KeySelectorData);
+                Obj->SetStringField(TEXT("bb_key"), KeyName.ToString());
+            }
+        }
+    }
+
     return Obj;
 }
 

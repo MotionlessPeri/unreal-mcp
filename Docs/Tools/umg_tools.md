@@ -36,11 +36,16 @@ Canonical parameters:
 2. Optional `path` (default `/Game/UI`)
 3. Optional `board_rows` (default `10`)
 4. Optional `board_cols` (default `9`)
+5. Optional `board_origin` = `[x, y]` (default `[40, 40]`)
+6. Optional `cell_size` = `[w, h]` (default `[70, 70]`)
+7. Optional `board_padding` (default `30`)
+8. Optional `side_panel_width` (default `320`)
+9. Optional `side_panel_min_height` (default `420`)
 
 Behavior:
 1. Uses existing batch-capable commands (`add_widget_child_batch`, `set_canvas_slot_layout_batch`, `set_uniform_grid_slot_batch`, `set_text_block_properties_batch`, `set_widget_common_properties_batch`) to minimize compile/save churn.
 2. Applies initial layout and text/common-property defaults suitable for debug UI iteration.
-3. Returns a summary with created asset path, counts, and root child names.
+3. Returns a summary with created asset path, counts, root child names, and resolved layout values.
 
 ### get_widget_tree
 

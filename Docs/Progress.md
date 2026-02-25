@@ -245,6 +245,15 @@
      - initial text and common-property defaults
    - no new plugin command required; this is a tool-layer composition capability intended to reduce command pressure in consumers.
    - added `Python/scripts/umg_create_debugboard_skeleton_tool_smoke.py` to validate the helper orchestration itself (tool-layer path) against a live UE editor using a lightweight local stub for `unreal_mcp_server` import wiring.
+30. UMG tool-layer template helper (DebugBoard skeleton) parameterization expanded:
+   - `create_debugboard_skeleton_widget` now supports layout configuration inputs:
+     - `board_origin`
+     - `cell_size`
+     - `board_padding`
+     - `side_panel_width`
+     - `side_panel_min_height`
+   - defaults remain backward-compatible with previous helper behavior.
+   - tool-layer smoke updated to validate non-default layout parameters and readback summary.
 
 ## In Progress
 

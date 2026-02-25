@@ -93,7 +93,18 @@ def main() -> int:
         raise RuntimeError("create_debugboard_skeleton_widget not registered")
 
     widget_name = f"WBP_McpToolDebugBoardProbe_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    result = helper(None, widget_name=widget_name, path="/Game/UI", board_rows=4, board_cols=4)
+    result = helper(
+        None,
+        widget_name=widget_name,
+        path="/Game/UI",
+        board_rows=4,
+        board_cols=4,
+        board_origin=[120.0, 80.0],
+        cell_size=[52.0, 48.0],
+        board_padding=18.0,
+        side_panel_width=240.0,
+        side_panel_min_height=260.0,
+    )
     if not isinstance(result, dict):
         raise RuntimeError(f"Unexpected helper return type: {type(result)}")
     if result.get("success") is not True:
@@ -105,6 +116,13 @@ def main() -> int:
         raise RuntimeError(f"add_cell_created_count mismatch: {result}")
     if result.get("grid_slot_updated_count") != 16:
         raise RuntimeError(f"grid_slot_updated_count mismatch: {result}")
+    layout = result.get("layout") or {}
+    if layout.get("board_origin") != [120.0, 80.0]:
+        raise RuntimeError(f"layout.board_origin mismatch: {result}")
+    if layout.get("cell_size") != [52.0, 48.0]:
+        raise RuntimeError(f"layout.cell_size mismatch: {result}")
+    if abs(float(layout.get("board_padding", -1)) - 18.0) > 1e-6:
+        raise RuntimeError(f"layout.board_padding mismatch: {result}")
 
     print(json.dumps({
         "widget_name": result.get("widget_name"),
@@ -114,6 +132,7 @@ def main() -> int:
         "grid_slot_updated_count": result.get("grid_slot_updated_count"),
         "text_updated_count": result.get("text_updated_count"),
         "root_children": result.get("root_children"),
+        "layout": result.get("layout"),
     }, ensure_ascii=False, indent=2))
     return 0
 

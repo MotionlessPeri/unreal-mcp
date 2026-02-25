@@ -94,7 +94,12 @@ def register_umg_tools(mcp: FastMCP):
         widget_name: str,
         path: str = "/Game/UI",
         board_rows: int = 10,
-        board_cols: int = 9
+        board_cols: int = 9,
+        board_origin: List[float] | None = None,
+        cell_size: List[float] | None = None,
+        board_padding: float = 30.0,
+        side_panel_width: float = 320.0,
+        side_panel_min_height: float = 420.0
     ) -> Dict[str, Any]:
         """
         Create a reusable DebugBoard skeleton Widget Blueprint using existing UMG batch primitives.
@@ -111,6 +116,11 @@ def register_umg_tools(mcp: FastMCP):
             path: Content path where the widget blueprint should be created (default: /Game/UI)
             board_rows: Board row count (default: 10)
             board_cols: Board column count (default: 9)
+            board_origin: Optional [x, y] top-left position for BoardGrid (default: [40, 40])
+            cell_size: Optional [w, h] for per-cell layout sizing used to derive board panel size (default: [70, 70])
+            board_padding: Horizontal gap between board and side panel (default: 30)
+            side_panel_width: Width of side panel (default: 320)
+            side_panel_min_height: Minimum side panel height (default: 420)
 
         Returns:
             Dict summary with created path and key counts/layout readback.
@@ -120,6 +130,25 @@ def register_umg_tools(mcp: FastMCP):
         try:
             if board_rows <= 0 or board_cols <= 0:
                 return {"success": False, "message": "board_rows and board_cols must be > 0"}
+            if board_padding < 0:
+                return {"success": False, "message": "board_padding must be >= 0"}
+            if side_panel_width <= 0 or side_panel_min_height <= 0:
+                return {"success": False, "message": "side_panel_width and side_panel_min_height must be > 0"}
+
+            if board_origin is None:
+                board_origin = [40.0, 40.0]
+            if cell_size is None:
+                cell_size = [70.0, 70.0]
+
+            if len(board_origin) < 2 or len(cell_size) < 2:
+                return {"success": False, "message": "board_origin and cell_size must be [x, y] arrays"}
+
+            board_origin_x = float(board_origin[0])
+            board_origin_y = float(board_origin[1])
+            cell_width = float(cell_size[0])
+            cell_height = float(cell_size[1])
+            if cell_width <= 0 or cell_height <= 0:
+                return {"success": False, "message": "cell_size values must be > 0"}
 
             unreal = get_unreal_connection()
             if not unreal:
@@ -170,14 +199,14 @@ def register_umg_tools(mcp: FastMCP):
                 ],
             })
 
-            board_width = float(board_cols * 70)
-            board_height = float(board_rows * 70)
-            side_x = 40.0 + board_width + 30.0
+            board_width = float(board_cols * cell_width)
+            board_height = float(board_rows * cell_height)
+            side_x = board_origin_x + board_width + float(board_padding)
             canvas_layout = _send_and_require(unreal, "set_canvas_slot_layout_batch", {
                 "blueprint_name": bp,
                 "items": [
-                    {"widget_name": "BoardGrid", "position": [40.0, 40.0], "size": [board_width, board_height], "z_order": 1},
-                    {"widget_name": "SidePanel", "position": [side_x, 40.0], "size": [320.0, max(board_height, 420.0)], "z_order": 2},
+                    {"widget_name": "BoardGrid", "position": [board_origin_x, board_origin_y], "size": [board_width, board_height], "z_order": 1},
+                    {"widget_name": "SidePanel", "position": [side_x, board_origin_y], "size": [float(side_panel_width), max(board_height, float(side_panel_min_height))], "z_order": 2},
                 ],
             })
 
@@ -277,6 +306,13 @@ def register_umg_tools(mcp: FastMCP):
                 "grid_slot_updated_count": grid_batch.get("updated_count"),
                 "text_updated_count": text_batch.get("updated_count"),
                 "canvas_layout_updated_count": canvas_layout.get("updated_count"),
+                "layout": {
+                    "board_origin": [board_origin_x, board_origin_y],
+                    "cell_size": [cell_width, cell_height],
+                    "board_padding": float(board_padding),
+                    "side_panel_width": float(side_panel_width),
+                    "side_panel_min_height": float(side_panel_min_height),
+                },
                 "root_children": [child.get("name") for child in ((tree.get("root") or {}).get("children") or [])],
                 "note": "DebugBoard skeleton created using existing Route B batch primitives.",
             }

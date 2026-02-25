@@ -232,6 +232,10 @@
      - batch text/common-property updates and widget-tree readback validation
    - validated on consumer `StupidChessUE`; command chain passes end-to-end and confirms `cell_count=90`.
    - operational note: one run under regular D3D12 editor UI crashed in render thread during compile/save (`D3D12RHI` callstack, not MCP command error). Re-running under `-NullRHI` completed successfully; keep `-NullRHI` in mind for heavy automation smoke runs.
+28. Composite smoke stability harness (full DebugBoard skeleton) added:
+   - added `Python/scripts/umg_full_debugboard_stress_smoke.py` to repeat-run the full composite smoke with MCP health checks (`ping`) before/after each iteration.
+   - purpose: turn intermittent D3D12 crash observations into a repeatable validation loop and capture pass/fail counts + iteration-level timing.
+   - script is harness-only (no new MCP commands) and is intended for consumer-side D3D12 stability probing.
 
 ## In Progress
 
@@ -330,6 +334,7 @@ Route B Follow-up (2026-02-24): Full-board batch child creation unblock
 6. Evaluate whether generic asset cleanup should be promoted beyond UMG-specific cleanup (cross-tooling ergonomics).
 7. Evaluate deferred compile/save transaction mode (post-`add_widget_child_batch`) for even larger composite builds and lower editor churn.
 8. Consider template/helper layer for repeatable consumer UI skeleton generation now that full DebugBoard skeleton composition smoke passes.
+9. Investigate intermittent D3D12 editor-side instability during heavy UMG automation if stress harness shows reproducible failures (renderer-thread crash vs command bug separation).
 
 ## Validation Baseline
 

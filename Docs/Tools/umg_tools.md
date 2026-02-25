@@ -41,11 +41,17 @@ Canonical parameters:
 7. Optional `board_padding` (default `30`)
 8. Optional `side_panel_width` (default `320`)
 9. Optional `side_panel_min_height` (default `420`)
+10. Optional `status_text_widgets` (custom side-panel status `TextBlock` names)
+11. Optional `action_button_widgets` (custom side-panel action `Button` names)
+12. Optional `button_enabled_widgets` (subset of action buttons enabled initially)
+13. Optional `status_text_values` (mapping: status text widget name -> initial text)
+14. Optional `button_label_values` (mapping: action button name -> label text)
 
 Behavior:
 1. Uses existing batch-capable commands (`add_widget_child_batch`, `set_canvas_slot_layout_batch`, `set_uniform_grid_slot_batch`, `set_text_block_properties_batch`, `set_widget_common_properties_batch`) to minimize compile/save churn.
 2. Applies initial layout and text/common-property defaults suitable for debug UI iteration.
 3. Returns a summary with created asset path, counts, root child names, and resolved layout values.
+4. Supports custom side-panel schema while keeping defaults compatible with the original StupidChess-style debug panel.
 
 ### get_widget_tree
 

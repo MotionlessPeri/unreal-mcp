@@ -99,7 +99,12 @@ def register_umg_tools(mcp: FastMCP):
         cell_size: List[float] | None = None,
         board_padding: float = 30.0,
         side_panel_width: float = 320.0,
-        side_panel_min_height: float = 420.0
+        side_panel_min_height: float = 420.0,
+        status_text_widgets: List[str] | None = None,
+        action_button_widgets: List[str] | None = None,
+        button_enabled_widgets: List[str] | None = None,
+        status_text_values: Dict[str, str] | None = None,
+        button_label_values: Dict[str, str] | None = None
     ) -> Dict[str, Any]:
         """
         Create a reusable DebugBoard skeleton Widget Blueprint using existing UMG batch primitives.
@@ -121,6 +126,11 @@ def register_umg_tools(mcp: FastMCP):
             board_padding: Horizontal gap between board and side panel (default: 30)
             side_panel_width: Width of side panel (default: 320)
             side_panel_min_height: Minimum side panel height (default: 420)
+            status_text_widgets: Optional status TextBlock widget names for SidePanel
+            action_button_widgets: Optional action Button widget names for SidePanel
+            button_enabled_widgets: Optional subset of action buttons to enable initially
+            status_text_values: Optional mapping of status TextBlock name -> initial text
+            button_label_values: Optional mapping of action button name -> label text
 
         Returns:
             Dict summary with created path and key counts/layout readback.
@@ -155,7 +165,7 @@ def register_umg_tools(mcp: FastMCP):
                 logger.error("Failed to connect to Unreal Engine")
                 return {"success": False, "message": "Failed to connect to Unreal Engine"}
 
-            status_texts = [
+            default_status_texts = [
                 "TxtTitle",
                 "TxtPhase",
                 "TxtTurn",
@@ -164,7 +174,7 @@ def register_umg_tools(mcp: FastMCP):
                 "TxtLastAck",
                 "TxtGameOver",
             ]
-            action_buttons = [
+            default_action_buttons = [
                 "BtnJoin",
                 "BtnPullRed",
                 "BtnPullBlack",
@@ -172,6 +182,45 @@ def register_umg_tools(mcp: FastMCP):
                 "BtnRedMove",
                 "BtnBlackResign",
             ]
+            status_texts = list(status_text_widgets) if status_text_widgets is not None else default_status_texts
+            action_buttons = list(action_button_widgets) if action_button_widgets is not None else default_action_buttons
+            if len(status_texts) == 0:
+                return {"success": False, "message": "status_text_widgets must not be empty"}
+            if len(action_buttons) == 0:
+                return {"success": False, "message": "action_button_widgets must not be empty"}
+            if len(set(status_texts)) != len(status_texts):
+                return {"success": False, "message": "status_text_widgets contains duplicates"}
+            if len(set(action_buttons)) != len(action_buttons):
+                return {"success": False, "message": "action_button_widgets contains duplicates"}
+            if set(status_texts) & set(action_buttons):
+                return {"success": False, "message": "status_text_widgets and action_button_widgets overlap"}
+
+            if button_enabled_widgets is None:
+                button_enabled_set = {"BtnJoin", "BtnPullRed", "BtnPullBlack"}
+            else:
+                button_enabled_set = set(button_enabled_widgets)
+            unknown_enabled = sorted(button_enabled_set - set(action_buttons))
+            if unknown_enabled:
+                return {"success": False, "message": f"button_enabled_widgets contains unknown buttons: {unknown_enabled}"}
+
+            status_text_values_map = dict(status_text_values or {})
+            button_label_values_map = dict(button_label_values or {})
+
+            default_status_text_values = {
+                "TxtTitle": "DebugBoard Skeleton (Auto)",
+                "TxtPhase": "Phase: SetupCommit",
+                "TxtTurn": "Turn: Red",
+                "TxtRedCursor": "RedCursor: 0",
+                "TxtBlackCursor": "BlackCursor: 0",
+                "TxtLastAck": "LastAck: <none>",
+                "TxtGameOver": "GameOver: <none>",
+            }
+            for status_name in status_texts:
+                if status_name not in status_text_values_map:
+                    status_text_values_map[status_name] = default_status_text_values.get(status_name, f"{status_name}: <unset>")
+            for btn_name in action_buttons:
+                if btn_name not in button_label_values_map:
+                    button_label_values_map[btn_name] = btn_name.replace("Btn", "")
 
             create = _send_and_require(unreal, "create_umg_widget_blueprint", {
                 "widget_name": widget_name,
@@ -236,29 +285,39 @@ def register_umg_tools(mcp: FastMCP):
                     + [{"widget_name": "SidePanel", "visibility": "Visible"}]
                     + [{"widget_name": "BoardGrid", "visibility": "Visible"}]
                     + [
-                        {"widget_name": "BtnJoin", "visibility": "Visible", "is_enabled": True},
-                        {"widget_name": "BtnPullRed", "visibility": "Visible", "is_enabled": True},
-                        {"widget_name": "BtnPullBlack", "visibility": "Visible", "is_enabled": True},
-                        {"widget_name": "BtnCommitReveal", "visibility": "Visible", "is_enabled": False},
-                        {"widget_name": "BtnRedMove", "visibility": "Visible", "is_enabled": False},
-                        {"widget_name": "BtnBlackResign", "visibility": "Visible", "is_enabled": False},
+                        {
+                            "widget_name": btn_name,
+                            "visibility": "Visible",
+                            "is_enabled": btn_name in button_enabled_set,
+                        }
+                        for btn_name in action_buttons
                     ]
                 ),
             })
 
-            text_items: List[Dict[str, Any]] = [
-                {"widget_name": "TxtTitle", "text": "DebugBoard Skeleton (Auto)", "color": [0.95, 0.95, 1.0, 1.0]},
-                {"widget_name": "TxtPhase", "text": "Phase: SetupCommit", "color": [0.85, 0.9, 0.95, 1.0]},
-                {"widget_name": "TxtTurn", "text": "Turn: Red", "color": [1.0, 0.55, 0.55, 1.0]},
-                {"widget_name": "TxtRedCursor", "text": "RedCursor: 0", "color": [1.0, 0.4, 0.4, 1.0]},
-                {"widget_name": "TxtBlackCursor", "text": "BlackCursor: 0", "color": [0.7, 0.7, 0.7, 1.0]},
-                {"widget_name": "TxtLastAck", "text": "LastAck: <none>", "color": [0.85, 0.85, 0.85, 1.0]},
-                {"widget_name": "TxtGameOver", "text": "GameOver: <none>", "color": [0.9, 0.9, 0.7, 1.0]},
-            ]
+            text_items: List[Dict[str, Any]] = []
+            for status_name in status_texts:
+                if status_name == "TxtTitle":
+                    color = [0.95, 0.95, 1.0, 1.0]
+                elif status_name == "TxtTurn":
+                    color = [1.0, 0.55, 0.55, 1.0]
+                elif status_name == "TxtRedCursor":
+                    color = [1.0, 0.4, 0.4, 1.0]
+                elif status_name == "TxtBlackCursor":
+                    color = [0.7, 0.7, 0.7, 1.0]
+                elif status_name == "TxtGameOver":
+                    color = [0.9, 0.9, 0.7, 1.0]
+                else:
+                    color = [0.85, 0.85, 0.85, 1.0]
+                text_items.append({
+                    "widget_name": status_name,
+                    "text": status_text_values_map.get(status_name, f"{status_name}: <unset>"),
+                    "color": color,
+                })
             for btn_name in action_buttons:
                 text_items.append({
                     "widget_name": f"{btn_name}_Label",
-                    "text": btn_name.replace("Btn", ""),
+                    "text": button_label_values_map.get(btn_name, btn_name.replace("Btn", "")),
                     "color": [1.0, 1.0, 1.0, 1.0],
                 })
 
@@ -302,6 +361,9 @@ def register_umg_tools(mcp: FastMCP):
                 "board_rows": board_rows,
                 "board_cols": board_cols,
                 "board_cell_count": board_rows * board_cols,
+                "status_text_count": len(status_texts),
+                "action_button_count": len(action_buttons),
+                "button_enabled_count": len(button_enabled_set),
                 "add_cell_created_count": add_cells_batch.get("created_count"),
                 "grid_slot_updated_count": grid_batch.get("updated_count"),
                 "text_updated_count": text_batch.get("updated_count"),
@@ -314,6 +376,11 @@ def register_umg_tools(mcp: FastMCP):
                     "side_panel_min_height": float(side_panel_min_height),
                 },
                 "root_children": [child.get("name") for child in ((tree.get("root") or {}).get("children") or [])],
+                "side_panel": {
+                    "status_text_widgets": status_texts,
+                    "action_button_widgets": action_buttons,
+                    "button_enabled_widgets": sorted(button_enabled_set),
+                },
                 "note": "DebugBoard skeleton created using existing Route B batch primitives.",
             }
 

@@ -104,6 +104,18 @@ def main() -> int:
         board_padding=18.0,
         side_panel_width=240.0,
         side_panel_min_height=260.0,
+        status_text_widgets=["TxtTitle", "TxtPhase", "TxtHint"],
+        action_button_widgets=["BtnJoin", "BtnSync"],
+        button_enabled_widgets=["BtnSync"],
+        status_text_values={
+            "TxtTitle": "Custom Tool Smoke",
+            "TxtPhase": "Phase: Custom",
+            "TxtHint": "Hint: configurable side panel",
+        },
+        button_label_values={
+            "BtnJoin": "JoinNow",
+            "BtnSync": "SyncState",
+        },
     )
     if not isinstance(result, dict):
         raise RuntimeError(f"Unexpected helper return type: {type(result)}")
@@ -116,6 +128,12 @@ def main() -> int:
         raise RuntimeError(f"add_cell_created_count mismatch: {result}")
     if result.get("grid_slot_updated_count") != 16:
         raise RuntimeError(f"grid_slot_updated_count mismatch: {result}")
+    if result.get("status_text_count") != 3:
+        raise RuntimeError(f"status_text_count mismatch: {result}")
+    if result.get("action_button_count") != 2:
+        raise RuntimeError(f"action_button_count mismatch: {result}")
+    if result.get("button_enabled_count") != 1:
+        raise RuntimeError(f"button_enabled_count mismatch: {result}")
     layout = result.get("layout") or {}
     if layout.get("board_origin") != [120.0, 80.0]:
         raise RuntimeError(f"layout.board_origin mismatch: {result}")
@@ -123,6 +141,13 @@ def main() -> int:
         raise RuntimeError(f"layout.cell_size mismatch: {result}")
     if abs(float(layout.get("board_padding", -1)) - 18.0) > 1e-6:
         raise RuntimeError(f"layout.board_padding mismatch: {result}")
+    side_panel = result.get("side_panel") or {}
+    if side_panel.get("status_text_widgets") != ["TxtTitle", "TxtPhase", "TxtHint"]:
+        raise RuntimeError(f"side_panel.status_text_widgets mismatch: {result}")
+    if side_panel.get("action_button_widgets") != ["BtnJoin", "BtnSync"]:
+        raise RuntimeError(f"side_panel.action_button_widgets mismatch: {result}")
+    if side_panel.get("button_enabled_widgets") != ["BtnSync"]:
+        raise RuntimeError(f"side_panel.button_enabled_widgets mismatch: {result}")
 
     print(json.dumps({
         "widget_name": result.get("widget_name"),
@@ -133,6 +158,7 @@ def main() -> int:
         "text_updated_count": result.get("text_updated_count"),
         "root_children": result.get("root_children"),
         "layout": result.get("layout"),
+        "side_panel": result.get("side_panel"),
     }, ensure_ascii=False, indent=2))
     return 0
 

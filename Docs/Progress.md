@@ -254,6 +254,15 @@
      - `side_panel_min_height`
    - defaults remain backward-compatible with previous helper behavior.
    - tool-layer smoke updated to validate non-default layout parameters and readback summary.
+31. UMG tool-layer template helper (DebugBoard skeleton) side-panel customization expanded:
+   - `create_debugboard_skeleton_widget` now supports custom side-panel schema:
+     - `status_text_widgets`
+     - `action_button_widgets`
+     - `button_enabled_widgets`
+     - `status_text_values`
+     - `button_label_values`
+   - default behavior remains compatible with the original StupidChess debug-panel naming set.
+   - tool-layer smoke updated to validate a non-default side-panel schema (custom text/button names and enable-state subset).
 
 ## In Progress
 

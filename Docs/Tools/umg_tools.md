@@ -20,6 +20,28 @@ Canonical parameters:
 Compatibility:
 1. Legacy `name` is still accepted for older clients.
 
+### create_debugboard_skeleton_widget
+
+High-level Python MCP tool that composes existing Route B batch primitives to create a reusable DebugBoard skeleton widget.
+
+This is a tool-layer helper (Python orchestration), not a new plugin command. It builds:
+1. `RootCanvas`
+2. `BoardGrid` (`UniformGridPanel`)
+3. `SidePanel` (`VerticalBox`)
+4. full board cell skeleton (`Cell_<row>_<col>`)
+5. side-panel status `TextBlock`s and action `Button`s (with label `TextBlock`s)
+
+Canonical parameters:
+1. `widget_name`
+2. Optional `path` (default `/Game/UI`)
+3. Optional `board_rows` (default `10`)
+4. Optional `board_cols` (default `9`)
+
+Behavior:
+1. Uses existing batch-capable commands (`add_widget_child_batch`, `set_canvas_slot_layout_batch`, `set_uniform_grid_slot_batch`, `set_text_block_properties_batch`, `set_widget_common_properties_batch`) to minimize compile/save churn.
+2. Applies initial layout and text/common-property defaults suitable for debug UI iteration.
+3. Returns a summary with created asset path, counts, and root child names.
+
 ### get_widget_tree
 
 Read the widget hierarchy from a Widget Blueprint.

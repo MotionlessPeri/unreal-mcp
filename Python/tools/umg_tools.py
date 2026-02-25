@@ -11,6 +11,30 @@ from mcp.server.fastmcp import FastMCP, Context
 # Get logger
 logger = logging.getLogger("UnrealMCP")
 
+
+def _require_mcp_success(response: Dict[str, Any], command_name: str) -> Dict[str, Any]:
+    """Unwrap Unreal MCP response and raise on command-level failure."""
+    if not response:
+        raise RuntimeError(f"{command_name}: no response from Unreal Engine")
+
+    if response.get("status") == "error":
+        raise RuntimeError(f"{command_name}: {response.get('error', 'unknown error')}")
+
+    result = response.get("result")
+    if not isinstance(result, dict):
+        raise RuntimeError(f"{command_name}: malformed response ({response})")
+
+    if result.get("success") is False:
+        raise RuntimeError(f"{command_name}: result.success=false ({result})")
+
+    return result
+
+
+def _send_and_require(unreal: Any, command_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Send a command to UE plugin and return the unwrapped success result object."""
+    response = unreal.send_command(command_name, params)
+    return _require_mcp_success(response, command_name)
+
 def register_umg_tools(mcp: FastMCP):
     """Register UMG tools with the MCP server."""
 
@@ -61,6 +85,204 @@ def register_umg_tools(mcp: FastMCP):
             
         except Exception as e:
             error_msg = f"Error creating UMG Widget Blueprint: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def create_debugboard_skeleton_widget(
+        ctx: Context,
+        widget_name: str,
+        path: str = "/Game/UI",
+        board_rows: int = 10,
+        board_cols: int = 9
+    ) -> Dict[str, Any]:
+        """
+        Create a reusable DebugBoard skeleton Widget Blueprint using existing UMG batch primitives.
+
+        This is a high-level composition helper that builds:
+        1) Root CanvasPanel
+        2) BoardGrid (UniformGridPanel) with full board cell skeleton
+        3) SidePanel (VerticalBox) with status TextBlocks and action Buttons
+        4) Button label TextBlocks
+        5) Initial text/common-property state via batch setters
+
+        Args:
+            widget_name: Widget Blueprint asset name to create
+            path: Content path where the widget blueprint should be created (default: /Game/UI)
+            board_rows: Board row count (default: 10)
+            board_cols: Board column count (default: 9)
+
+        Returns:
+            Dict summary with created path and key counts/layout readback.
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            if board_rows <= 0 or board_cols <= 0:
+                return {"success": False, "message": "board_rows and board_cols must be > 0"}
+
+            unreal = get_unreal_connection()
+            if not unreal:
+                logger.error("Failed to connect to Unreal Engine")
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+
+            status_texts = [
+                "TxtTitle",
+                "TxtPhase",
+                "TxtTurn",
+                "TxtRedCursor",
+                "TxtBlackCursor",
+                "TxtLastAck",
+                "TxtGameOver",
+            ]
+            action_buttons = [
+                "BtnJoin",
+                "BtnPullRed",
+                "BtnPullBlack",
+                "BtnCommitReveal",
+                "BtnRedMove",
+                "BtnBlackResign",
+            ]
+
+            create = _send_and_require(unreal, "create_umg_widget_blueprint", {
+                "widget_name": widget_name,
+                "path": path,
+                "parent_class": "UserWidget",
+            })
+            bp = create.get("path", f"{path.rstrip('/')}/{widget_name}")
+
+            _send_and_require(unreal, "ensure_widget_root", {
+                "blueprint_name": bp,
+                "widget_class": "CanvasPanel",
+                "widget_name": "RootCanvas",
+                "replace_existing": True,
+            })
+            _send_and_require(unreal, "clear_widget_children", {
+                "blueprint_name": bp,
+                "widget_name": "RootCanvas",
+            })
+
+            _send_and_require(unreal, "add_widget_child_batch", {
+                "blueprint_name": bp,
+                "items": [
+                    {"parent_widget_name": "RootCanvas", "widget_class": "UniformGridPanel", "widget_name": "BoardGrid"},
+                    {"parent_widget_name": "RootCanvas", "widget_class": "VerticalBox", "widget_name": "SidePanel"},
+                ],
+            })
+
+            board_width = float(board_cols * 70)
+            board_height = float(board_rows * 70)
+            side_x = 40.0 + board_width + 30.0
+            canvas_layout = _send_and_require(unreal, "set_canvas_slot_layout_batch", {
+                "blueprint_name": bp,
+                "items": [
+                    {"widget_name": "BoardGrid", "position": [40.0, 40.0], "size": [board_width, board_height], "z_order": 1},
+                    {"widget_name": "SidePanel", "position": [side_x, 40.0], "size": [320.0, max(board_height, 420.0)], "z_order": 2},
+                ],
+            })
+
+            side_items: List[Dict[str, Any]] = []
+            for name in status_texts:
+                side_items.append({"parent_widget_name": "SidePanel", "widget_class": "TextBlock", "widget_name": name})
+            for name in action_buttons:
+                side_items.append({"parent_widget_name": "SidePanel", "widget_class": "Button", "widget_name": name})
+
+            _send_and_require(unreal, "add_widget_child_batch", {
+                "blueprint_name": bp,
+                "items": side_items,
+            })
+
+            _send_and_require(unreal, "add_widget_child_batch", {
+                "blueprint_name": bp,
+                "items": [
+                    {"parent_widget_name": btn_name, "widget_class": "TextBlock", "widget_name": f"{btn_name}_Label"}
+                    for btn_name in action_buttons
+                ],
+            })
+
+            _send_and_require(unreal, "set_widget_common_properties_batch", {
+                "blueprint_name": bp,
+                "items": (
+                    [{"widget_name": name, "visibility": "Visible"} for name in status_texts]
+                    + [{"widget_name": "SidePanel", "visibility": "Visible"}]
+                    + [{"widget_name": "BoardGrid", "visibility": "Visible"}]
+                    + [
+                        {"widget_name": "BtnJoin", "visibility": "Visible", "is_enabled": True},
+                        {"widget_name": "BtnPullRed", "visibility": "Visible", "is_enabled": True},
+                        {"widget_name": "BtnPullBlack", "visibility": "Visible", "is_enabled": True},
+                        {"widget_name": "BtnCommitReveal", "visibility": "Visible", "is_enabled": False},
+                        {"widget_name": "BtnRedMove", "visibility": "Visible", "is_enabled": False},
+                        {"widget_name": "BtnBlackResign", "visibility": "Visible", "is_enabled": False},
+                    ]
+                ),
+            })
+
+            text_items: List[Dict[str, Any]] = [
+                {"widget_name": "TxtTitle", "text": "DebugBoard Skeleton (Auto)", "color": [0.95, 0.95, 1.0, 1.0]},
+                {"widget_name": "TxtPhase", "text": "Phase: SetupCommit", "color": [0.85, 0.9, 0.95, 1.0]},
+                {"widget_name": "TxtTurn", "text": "Turn: Red", "color": [1.0, 0.55, 0.55, 1.0]},
+                {"widget_name": "TxtRedCursor", "text": "RedCursor: 0", "color": [1.0, 0.4, 0.4, 1.0]},
+                {"widget_name": "TxtBlackCursor", "text": "BlackCursor: 0", "color": [0.7, 0.7, 0.7, 1.0]},
+                {"widget_name": "TxtLastAck", "text": "LastAck: <none>", "color": [0.85, 0.85, 0.85, 1.0]},
+                {"widget_name": "TxtGameOver", "text": "GameOver: <none>", "color": [0.9, 0.9, 0.7, 1.0]},
+            ]
+            for btn_name in action_buttons:
+                text_items.append({
+                    "widget_name": f"{btn_name}_Label",
+                    "text": btn_name.replace("Btn", ""),
+                    "color": [1.0, 1.0, 1.0, 1.0],
+                })
+
+            text_batch = _send_and_require(unreal, "set_text_block_properties_batch", {
+                "blueprint_name": bp,
+                "items": text_items,
+            })
+
+            add_cell_items: List[Dict[str, Any]] = []
+            grid_slot_items: List[Dict[str, Any]] = []
+            for row in range(board_rows):
+                for col in range(board_cols):
+                    cell_name = f"Cell_{row}_{col}"
+                    add_cell_items.append({
+                        "parent_widget_name": "BoardGrid",
+                        "widget_class": "Border",
+                        "widget_name": cell_name,
+                    })
+                    grid_slot_items.append({
+                        "widget_name": cell_name,
+                        "row": row,
+                        "column": col,
+                        "horizontal_alignment": "Fill",
+                        "vertical_alignment": "Fill",
+                    })
+
+            add_cells_batch = _send_and_require(unreal, "add_widget_child_batch", {
+                "blueprint_name": bp,
+                "items": add_cell_items,
+            })
+            grid_batch = _send_and_require(unreal, "set_uniform_grid_slot_batch", {
+                "blueprint_name": bp,
+                "items": grid_slot_items,
+            })
+            tree = _send_and_require(unreal, "get_widget_tree", {"blueprint_name": bp})
+
+            return {
+                "success": True,
+                "widget_name": widget_name,
+                "blueprint_name": bp,
+                "board_rows": board_rows,
+                "board_cols": board_cols,
+                "board_cell_count": board_rows * board_cols,
+                "add_cell_created_count": add_cells_batch.get("created_count"),
+                "grid_slot_updated_count": grid_batch.get("updated_count"),
+                "text_updated_count": text_batch.get("updated_count"),
+                "canvas_layout_updated_count": canvas_layout.get("updated_count"),
+                "root_children": [child.get("name") for child in ((tree.get("root") or {}).get("children") or [])],
+                "note": "DebugBoard skeleton created using existing Route B batch primitives.",
+            }
+
+        except Exception as e:
+            error_msg = f"Error creating DebugBoard skeleton widget: {e}"
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 

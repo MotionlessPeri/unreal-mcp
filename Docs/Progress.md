@@ -236,6 +236,15 @@
    - added `Python/scripts/umg_full_debugboard_stress_smoke.py` to repeat-run the full composite smoke with MCP health checks (`ping`) before/after each iteration.
    - purpose: turn intermittent D3D12 crash observations into a repeatable validation loop and capture pass/fail counts + iteration-level timing.
    - script is harness-only (no new MCP commands) and is intended for consumer-side D3D12 stability probing.
+29. UMG tool-layer template helper (DebugBoard skeleton) added:
+   - added Python MCP tool `create_debugboard_skeleton_widget` in `Python/tools/umg_tools.py`.
+   - helper composes existing Route B batch primitives to create a reusable 9x10-style DebugBoard skeleton widget:
+     - `RootCanvas`, `BoardGrid`, `SidePanel`
+     - full cell skeleton creation + grid slot layout
+     - side-panel status texts / buttons / button labels
+     - initial text and common-property defaults
+   - no new plugin command required; this is a tool-layer composition capability intended to reduce command pressure in consumers.
+   - added `Python/scripts/umg_create_debugboard_skeleton_tool_smoke.py` to validate the helper orchestration itself (tool-layer path) against a live UE editor using a lightweight local stub for `unreal_mcp_server` import wiring.
 
 ## In Progress
 
@@ -335,6 +344,7 @@ Route B Follow-up (2026-02-24): Full-board batch child creation unblock
 7. Evaluate deferred compile/save transaction mode (post-`add_widget_child_batch`) for even larger composite builds and lower editor churn.
 8. Consider template/helper layer for repeatable consumer UI skeleton generation now that full DebugBoard skeleton composition smoke passes.
 9. Investigate intermittent D3D12 editor-side instability during heavy UMG automation if stress harness shows reproducible failures (renderer-thread crash vs command bug separation).
+10. Evaluate a plugin-side deferred compile/save transaction mode to further reduce editor churn for large composite automation flows.
 
 ## Validation Baseline
 

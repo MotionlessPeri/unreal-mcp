@@ -276,6 +276,7 @@ from tools.node_tools import register_blueprint_node_tools
 from tools.project_tools import register_project_tools
 from tools.umg_tools import register_umg_tools
 from tools.behavior_tree_tools import register_behavior_tree_tools
+from tools.dialogue_tools import register_dialogue_tools
 
 # Register tools
 register_editor_tools(mcp)
@@ -284,6 +285,7 @@ register_blueprint_node_tools(mcp)
 register_project_tools(mcp)
 register_umg_tools(mcp)
 register_behavior_tree_tools(mcp)
+register_dialogue_tools(mcp)
 
 @mcp.prompt()
 def info():

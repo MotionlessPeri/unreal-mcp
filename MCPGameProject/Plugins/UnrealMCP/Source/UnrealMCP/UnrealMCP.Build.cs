@@ -36,7 +36,8 @@ public class UnrealMCP : ModuleRules
 				"JsonUtilities",
 				"DeveloperSettings",
 				"AIModule",       // UBehaviorTree, UBTCompositeNode, UBTTaskNode, etc.
-				"GameplayTasks"   // Required by AIModule
+				"GameplayTasks",  // Required by AIModule
+				"DialogueSystem"  // UDialogueAsset, UDialogueNode read commands
 			}
 		);
 		

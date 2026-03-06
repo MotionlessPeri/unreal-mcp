@@ -58,6 +58,7 @@
 #include "Commands/UnrealMCPCommonUtils.h"
 #include "Commands/UnrealMCPUMGCommands.h"
 #include "Commands/UnrealMCPBehaviorTreeCommands.h"
+#include "Commands/UnrealMCPDialogueCommands.h"
 
 // Default settings
 #define MCP_SERVER_HOST "127.0.0.1"
@@ -71,6 +72,7 @@ UUnrealMCPBridge::UUnrealMCPBridge()
     ProjectCommands = MakeShared<FUnrealMCPProjectCommands>();
     UMGCommands = MakeShared<FUnrealMCPUMGCommands>();
     BehaviorTreeCommands = MakeShared<FUnrealMCPBehaviorTreeCommands>();
+    DialogueCommands = MakeShared<FUnrealMCPDialogueCommands>();
 }
 
 UUnrealMCPBridge::~UUnrealMCPBridge()
@@ -81,6 +83,7 @@ UUnrealMCPBridge::~UUnrealMCPBridge()
     ProjectCommands.Reset();
     UMGCommands.Reset();
     BehaviorTreeCommands.Reset();
+    DialogueCommands.Reset();
 }
 
 // Initialize subsystem
@@ -323,6 +326,12 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
             else if (CommandType == TEXT("get_behavior_tree_info"))
             {
                 ResultJson = BehaviorTreeCommands->HandleCommand(CommandType, Params);
+            }
+            // Dialogue Commands
+            else if (CommandType == TEXT("get_dialogue_graph") ||
+                     CommandType == TEXT("get_dialogue_connections"))
+            {
+                ResultJson = DialogueCommands->HandleCommand(CommandType, Params);
             }
             else
             {

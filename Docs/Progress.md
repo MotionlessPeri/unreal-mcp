@@ -16,6 +16,12 @@
 
 ## Completed
 
+1. Dialogue System read commands (2026-03-06):
+   - added `get_dialogue_graph`: loads `UDialogueAsset`, serializes all nodes with type, position, and type-specific fields (speaker_name/dialogue_text for Speech; choices list for Choice). `node_id` = `UObject::GetName()`.
+   - added `get_dialogue_connections`: traverses runtime node pointers (NextNode / Choices[i].TargetNode), serializes directed edges with from/to node_id and pin names matching DialogueGraphSchema convention.
+   - added `"DialogueSystem"` to `UnrealMCP.Build.cs` public dependencies; added `DialogueSystem` plugin dependency to `UnrealMCP.uplugin`.
+   - new command class `FUnrealMCPDialogueCommands`; routed in `UnrealMCPBridge`, exposed in `Python/tools/dialogue_tools.py`, registered in `unreal_mcp_server.py`.
+
 1. `get_blueprint_graph_info` layout metadata enhancement (2026-02-25):
    - each serialized node now includes `width`, `height`, and `size_source` (`cached` from `NodeWidth/NodeHeight` if available, otherwise `estimated` fallback).
    - command response now includes overlap analysis for external formatters:

@@ -15,7 +15,7 @@ Create a new Widget Blueprint asset.
 Canonical parameters:
 1. `widget_name` (required)
 2. `path` (optional, default `/Game/Widgets`)
-3. `parent_class` (optional, currently only `UserWidget` is supported)
+3. `parent_class` (optional, default `UserWidget`; accepts full class path e.g. `/Script/DialogueSystem.DialogueWidget` — must inherit from `UUserWidget`)
 
 Compatibility:
 1. Legacy `name` is still accepted for older clients.

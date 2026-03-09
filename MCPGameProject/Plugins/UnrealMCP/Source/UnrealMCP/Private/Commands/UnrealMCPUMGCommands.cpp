@@ -141,56 +141,17 @@ void CollectWidgetSubtreeNames(const UWidget* Widget, TArray<FName>& OutNames)
 
 void EnsureWidgetVariableGuid(UWidgetBlueprint* WidgetBlueprint, const UWidget* Widget)
 {
-	if (!WidgetBlueprint || !Widget)
-	{
-		return;
-	}
-
-	const FName WidgetName = Widget->GetFName();
-	if (!WidgetBlueprint->WidgetVariableNameToGuidMap.Contains(WidgetName))
-	{
-		WidgetBlueprint->Modify();
-		WidgetBlueprint->WidgetVariableNameToGuidMap.Emplace(WidgetName, FGuid::NewDeterministicGuid(Widget->GetPathName()));
-	}
+	// WidgetVariableNameToGuidMap was removed in UE 5.5; GUIDs are managed internally.
 }
 
 void RenameWidgetVariableGuid(UWidgetBlueprint* WidgetBlueprint, const FName OldName, const FName NewName, const UWidget* WidgetForFallbackGuid)
 {
-	if (!WidgetBlueprint || OldName == NewName)
-	{
-		return;
-	}
-
-	FGuid ExistingGuid;
-	if (WidgetBlueprint->WidgetVariableNameToGuidMap.RemoveAndCopyValue(OldName, ExistingGuid))
-	{
-		WidgetBlueprint->Modify();
-		WidgetBlueprint->WidgetVariableNameToGuidMap.Add(NewName, ExistingGuid);
-		return;
-	}
-
-	if (WidgetForFallbackGuid)
-	{
-		EnsureWidgetVariableGuid(WidgetBlueprint, WidgetForFallbackGuid);
-	}
-	else if (!WidgetBlueprint->WidgetVariableNameToGuidMap.Contains(NewName))
-	{
-		WidgetBlueprint->Modify();
-		WidgetBlueprint->WidgetVariableNameToGuidMap.Add(NewName, FGuid::NewGuid());
-	}
+	// WidgetVariableNameToGuidMap was removed in UE 5.5; GUIDs are managed internally.
 }
 
 void RemoveWidgetVariableGuid(UWidgetBlueprint* WidgetBlueprint, const FName WidgetName)
 {
-	if (!WidgetBlueprint)
-	{
-		return;
-	}
-
-	if (WidgetBlueprint->WidgetVariableNameToGuidMap.Remove(WidgetName) > 0)
-	{
-		WidgetBlueprint->Modify();
-	}
+	// WidgetVariableNameToGuidMap was removed in UE 5.5; GUIDs are managed internally.
 }
 
 bool TryGetJsonVector2(const TSharedPtr<FJsonObject>& Params, const FString& FieldName, FVector2D& OutValue)
@@ -440,6 +401,12 @@ bool ApplyWidgetCommonPropertiesFields(const TSharedPtr<FJsonObject>& Params, UW
 	if (Params->TryGetBoolField(TEXT("is_enabled"), bIsEnabled))
 	{
 		Widget->SetIsEnabled(bIsEnabled);
+	}
+
+	bool bIsVariable = false;
+	if (Params->TryGetBoolField(TEXT("is_variable"), bIsVariable))
+	{
+		Widget->bIsVariable = bIsVariable;
 	}
 
 	return true;
@@ -855,12 +822,26 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCreateUMGWidgetBlueprint(co
 		PackagePath.LeftChopInline(1, EAllowShrinking::No);
 	}
 
-	FString ParentClassName = TEXT("UserWidget");
+	FString ParentClassName;
 	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
+
+	// Resolve parent class — default to UUserWidget
+	TSubclassOf<UUserWidget> ParentClass = UUserWidget::StaticClass();
 	if (!ParentClassName.IsEmpty() && !ParentClassName.Equals(TEXT("UserWidget"), ESearchCase::IgnoreCase))
 	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("Unsupported parent_class '%s'. Only 'UserWidget' is currently supported."), *ParentClassName));
+		// Try loading as full path (e.g. "/Script/DialogueSystem.DialogueWidget")
+		UClass* LoadedClass = StaticLoadClass(UUserWidget::StaticClass(), nullptr, *ParentClassName);
+		if (!LoadedClass)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Could not load parent_class '%s'. Use full path like '/Script/ModuleName.ClassName'."), *ParentClassName));
+		}
+		if (!LoadedClass->IsChildOf(UUserWidget::StaticClass()))
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("parent_class '%s' does not inherit from UUserWidget."), *ParentClassName));
+		}
+		ParentClass = LoadedClass;
 	}
 
 	FString AssetName = BlueprintName;
@@ -885,7 +866,7 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleCreateUMGWidgetBlueprint(co
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create UWidgetBlueprintFactory"));
 	}
-	Factory->ParentClass = UUserWidget::StaticClass();
+	Factory->ParentClass = ParentClass;
 	Factory->BlueprintType = BPTYPE_Normal;
 
 	UObject* CreatedObject = Factory->FactoryCreateNew(
@@ -1097,7 +1078,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChild(const TShare
 	}
 
 	FString ParentWidgetName;
-	Params->TryGetStringField(TEXT("parent_widget_name"), ParentWidgetName);
+	if (!Params->TryGetStringField(TEXT("parent_widget_name"), ParentWidgetName))
+	{
+		Params->TryGetStringField(TEXT("parent_name"), ParentWidgetName);
+	}
 
 	UWidgetBlueprint* WidgetBlueprint = ResolveWidgetBlueprint(BlueprintName);
 	if (!WidgetBlueprint)
@@ -1117,6 +1101,13 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChild(const TShare
 	if (!AddWidgetChildInternal(WidgetBlueprint, ParentWidgetName, WidgetClassName, WidgetName, ParentWidget, NewChild, AddedSlot, AddError))
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(AddError);
+	}
+
+	// Set is_variable if requested
+	bool bIsVariable = false;
+	if (Params->TryGetBoolField(TEXT("is_variable"), bIsVariable) && bIsVariable)
+	{
+		NewChild->bIsVariable = true;
 	}
 
 	MarkCompileAndSaveWidgetBlueprint(WidgetBlueprint);
@@ -1181,7 +1172,10 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChildBatch(const T
 			return FUnrealMCPCommonUtils::CreateErrorResponse(
 				FString::Printf(TEXT("items[%d] missing 'widget_name'"), ItemIndex));
 		}
-		ItemObj->TryGetStringField(TEXT("parent_widget_name"), ParentWidgetName);
+		if (!ItemObj->TryGetStringField(TEXT("parent_widget_name"), ParentWidgetName))
+		{
+			ItemObj->TryGetStringField(TEXT("parent_name"), ParentWidgetName);
+		}
 
 		UWidget* ParentWidget = nullptr;
 		UWidget* NewChild = nullptr;
@@ -1191,6 +1185,13 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleAddWidgetChildBatch(const T
 		{
 			return FUnrealMCPCommonUtils::CreateErrorResponse(
 				FString::Printf(TEXT("items[%d] add failed: %s"), ItemIndex, *AddError));
+		}
+
+		// Set is_variable if requested
+		bool bItemIsVariable = false;
+		if (ItemObj->TryGetBoolField(TEXT("is_variable"), bItemIsVariable) && bItemIsVariable)
+		{
+			NewChild->bIsVariable = true;
 		}
 
 		TSharedPtr<FJsonObject> ItemResult = MakeShared<FJsonObject>();

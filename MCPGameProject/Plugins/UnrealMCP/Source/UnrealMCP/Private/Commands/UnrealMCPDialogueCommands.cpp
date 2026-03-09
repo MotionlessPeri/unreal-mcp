@@ -84,9 +84,9 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueGraph(
         else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
         {
             TArray<TSharedPtr<FJsonValue>> ChoicesArr;
-            for (const FDialogueEdge& Edge : Choice->Choices)
+            for (const TObjectPtr<UDialogueChoiceItemNode>& Item : Choice->Items)
             {
-                ChoicesArr.Add(MakeShared<FJsonValueString>(Edge.ChoiceText.ToString()));
+                ChoicesArr.Add(MakeShared<FJsonValueString>(Item ? Item->ChoiceText.ToString() : TEXT("")));
             }
             NodeObj->SetArrayField(TEXT("choices"), ChoicesArr);
         }
@@ -144,20 +144,27 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueConnections
             ConnArr.Add(MakeShared<FJsonValueObject>(Conn));
         };
 
-        if (UDialogueEntryNode* Entry = Cast<UDialogueEntryNode>(Node))
+        // Entry and Speech use OutTransitions (single Out pin)
+        if (UDialogueNodeWithTransitions* WithTrans = Cast<UDialogueNodeWithTransitions>(Node))
         {
-            MakeConn(TEXT("Out"), Entry->NextNode);
-        }
-        else if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
-        {
-            MakeConn(TEXT("Next"), Speech->NextNode);
+            // For Entry/Speech: pin name is "Out"
+            // For ChoiceItem: pin name is also "Out" (but ChoiceItems are not in AllNodes)
+            FString PinName = TEXT("Out");
+            for (const FDialogueTransition& Trans : WithTrans->OutTransitions)
+            {
+                MakeConn(PinName, Trans.TargetNode);
+            }
         }
         else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
         {
-            for (int32 i = 0; i < Choice->Choices.Num(); ++i)
+            for (int32 i = 0; i < Choice->Items.Num(); ++i)
             {
-                FString PinName = FString::Printf(TEXT("Choice_%d"), i);
-                MakeConn(PinName, Choice->Choices[i].TargetNode);
+                if (!Choice->Items[i]) continue;
+                FString PinName = FString::Printf(TEXT("Item_%d"), i);
+                for (const FDialogueTransition& Trans : Choice->Items[i]->OutTransitions)
+                {
+                    MakeConn(PinName, Trans.TargetNode);
+                }
             }
         }
         // ExitNode: no outgoing connections

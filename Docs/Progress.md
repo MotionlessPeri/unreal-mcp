@@ -9,6 +9,7 @@
 5. 2026-02-25 (blueprint node precise delete/disconnect/pin-default commands)
 6. 2026-02-25 (blueprint node move commands for layout cleanup)
 7. 2026-02-25 (blueprint graph size/overlap metadata for layout tooling)
+8. 2026-03-06 (dialogue system read commands + live smoke validation)
 
 ## Current Milestone
 
@@ -16,11 +17,22 @@
 
 ## Completed
 
+1. UMG widget commands fixes (2026-03-09):
+   - `create_umg_widget_blueprint`: `parent_class` parameter now accepts full class path (e.g. `/Script/DialogueSystem.DialogueWidget`). Uses `StaticLoadClass` to dynamically resolve, validates inheritance from `UUserWidget`.
+   - `add_widget_child` / `add_widget_child_batch`: `is_variable` parameter now correctly sets `Widget->bIsVariable`.
+   - `add_widget_child` / `add_widget_child_batch`: `parent_name` accepted as alias for `parent_widget_name` (fixes silent fallback to root when using wrong param name).
+   - `set_widget_common_properties`: `is_variable` parameter now supported.
+   - Dialogue read commands (`get_dialogue_graph` / `get_dialogue_connections`) adapted to new data model (`Items` / `OutTransitions` instead of `Choices` / `NextNode`).
+
 1. Dialogue System read commands (2026-03-06):
    - added `get_dialogue_graph`: loads `UDialogueAsset`, serializes all nodes with type, position, and type-specific fields (speaker_name/dialogue_text for Speech; choices list for Choice). `node_id` = `UObject::GetName()`.
    - added `get_dialogue_connections`: traverses runtime node pointers (NextNode / Choices[i].TargetNode), serializes directed edges with from/to node_id and pin names matching DialogueGraphSchema convention.
    - added `"DialogueSystem"` to `UnrealMCP.Build.cs` public dependencies; added `DialogueSystem` plugin dependency to `UnrealMCP.uplugin`.
    - new command class `FUnrealMCPDialogueCommands`; routed in `UnrealMCPBridge`, exposed in `Python/tools/dialogue_tools.py`, registered in `unreal_mcp_server.py`.
+   - live smoke test validated (2026-03-06) against `DialogueSystemSample`/`/Game/NewDialogueAsset`:
+     - `get_dialogue_graph` returns 8 nodes (Entry/Speech/Choice/Exit types with correct position and type-specific fields).
+     - `get_dialogue_connections` returns 3 directed edges with correct from/to node_id and pin names.
+     - invalid path (`/Game/DoesNotExist`) returns `{"status": "error", "error": "Could not load asset at path: ..."}` as expected.
 
 1. `get_blueprint_graph_info` layout metadata enhancement (2026-02-25):
    - each serialized node now includes `width`, `height`, and `size_source` (`cached` from `NodeWidth/NodeHeight` if available, otherwise `estimated` fallback).

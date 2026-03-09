@@ -329,7 +329,12 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
             }
             // Dialogue Commands
             else if (CommandType == TEXT("get_dialogue_graph") ||
-                     CommandType == TEXT("get_dialogue_connections"))
+                     CommandType == TEXT("get_dialogue_connections") ||
+                     CommandType == TEXT("add_dialogue_node") ||
+                     CommandType == TEXT("set_dialogue_node_properties") ||
+                     CommandType == TEXT("connect_dialogue_nodes") ||
+                     CommandType == TEXT("disconnect_dialogue_nodes") ||
+                     CommandType == TEXT("delete_dialogue_node"))
             {
                 ResultJson = DialogueCommands->HandleCommand(CommandType, Params);
             }

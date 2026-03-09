@@ -10,12 +10,25 @@
 6. 2026-02-25 (blueprint node move commands for layout cleanup)
 7. 2026-02-25 (blueprint graph size/overlap metadata for layout tooling)
 8. 2026-03-06 (dialogue system read commands + live smoke validation)
+9. 2026-03-09 (MCP-2: dialogue system write commands + persistent NodeId)
 
 ## Current Milestone
 
 1. Stabilize blueprint graph automation for consumer projects (`StupidChess` as first consumer).
 
 ## Completed
+
+1. MCP-2: Dialogue System write commands (2026-03-09):
+   - **Prerequisite**: Added persistent `FGuid NodeId` to `UDialogueNode` (consumer-side). `PostLoad()` auto-generates GUID for existing assets. All MCP read commands now use `NodeId.ToString()` instead of `UObject::GetName()`.
+   - Added `"DialogueSystemEditor"` to `UnrealMCP.Build.cs` dependencies (write commands need `UDialogueGraphNode`).
+   - `add_dialogue_node`: Creates Speech/Choice/Exit node with graph node + runtime node. Returns persistent GUID. Choice nodes include default ChoiceItem with its own GUID.
+   - `set_dialogue_node_properties`: Sets speaker_name/dialogue_text (Speech), choice_text (ChoiceItem), pos_x/pos_y (any node). Syncs graph node position.
+   - `connect_dialogue_nodes`: Creates edge via Schema `TryCreateConnection` (visual + runtime sync). Supports Entry/Speech "Out" pin and Choice "Item_N" pins.
+   - `disconnect_dialogue_nodes`: Removes edge via Schema `BreakSinglePinLink` (visual + runtime sync).
+   - `delete_dialogue_node`: Breaks all pin links, removes graph node and runtime node. Rejects Entry/ChoiceItem deletion.
+   - `get_dialogue_graph` enhanced: Choice nodes now return `choices` as array of `{text, item_node_id}` objects instead of plain strings.
+   - All 5 write commands routed in `UnrealMCPBridge`, exposed in `Python/tools/dialogue_tools.py`.
+   - Helper methods extracted: `LoadDialogueAsset`, `FindNodeByGuid`, `FindOutputPin`, `FindInputPin`.
 
 1. UMG widget commands fixes (2026-03-09):
    - `create_umg_widget_blueprint`: `parent_class` parameter now accepts full class path (e.g. `/Script/DialogueSystem.DialogueWidget`). Uses `StaticLoadClass` to dynamically resolve, validates inheritance from `UUserWidget`.

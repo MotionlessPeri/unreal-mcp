@@ -10,7 +10,7 @@ class UEdGraphPin;
 /**
  * Handler class for Dialogue System MCP commands.
  * MCP-1 (read): get_dialogue_graph, get_dialogue_connections
- * MCP-2 (write): add_dialogue_node, set_dialogue_node_properties,
+ * MCP-2 (write): create_dialogue_asset, add_dialogue_node, set_dialogue_node_properties,
  *                connect_dialogue_nodes, disconnect_dialogue_nodes, delete_dialogue_node
  */
 class UNREALMCP_API FUnrealMCPDialogueCommands
@@ -26,6 +26,7 @@ private:
     TSharedPtr<FJsonObject> HandleGetDialogueConnections(const TSharedPtr<FJsonObject>& Params);
 
     // --- MCP-2: Write ---
+    TSharedPtr<FJsonObject> HandleCreateDialogueAsset(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleAddDialogueNode(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleSetDialogueNodeProperties(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleConnectDialogueNodes(const TSharedPtr<FJsonObject>& Params);

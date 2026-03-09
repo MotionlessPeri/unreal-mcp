@@ -1,10 +1,14 @@
 #include "Commands/UnrealMCPDialogueCommands.h"
 #include "Commands/UnrealMCPCommonUtils.h"
 #include "EditorAssetLibrary.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
 #include "DialogueAsset.h"
+#include "DialogueAssetFactory.h"
 #include "DialogueNode.h"
 #include "DialogueEdgeTypes.h"
 #include "DialogueGraphNode.h"
+#include "DialogueGraphSchema.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphSchema.h"
 
@@ -27,6 +31,8 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCommand(
         return HandleGetDialogueConnections(Params);
 
     // MCP-2: Write
+    if (CommandType == TEXT("create_dialogue_asset"))
+        return HandleCreateDialogueAsset(Params);
     if (CommandType == TEXT("add_dialogue_node"))
         return HandleAddDialogueNode(Params);
     if (CommandType == TEXT("set_dialogue_node_properties"))
@@ -290,6 +296,75 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueConnections
 // ============================================================================
 // MCP-2: Write commands
 // ============================================================================
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCreateDialogueAsset(
+    const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path'"));
+
+    // Check if already exists
+    if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
+
+#if WITH_EDITORONLY_DATA
+    // Split into package path and asset name
+    FString PackagePath, AssetName;
+    int32 LastSlash;
+    if (AssetPath.FindLastChar('/', LastSlash))
+    {
+        PackagePath = AssetPath.Left(LastSlash);
+        AssetName = AssetPath.Mid(LastSlash + 1);
+    }
+    else
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Invalid asset_path format"));
+    }
+
+    // Create via AssetTools (handles package creation, undo, etc.)
+    IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+    UDialogueAssetFactory* Factory = NewObject<UDialogueAssetFactory>();
+    UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, UDialogueAsset::StaticClass(), Factory);
+    if (!NewAsset)
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create DialogueAsset"));
+
+    UDialogueAsset* Asset = Cast<UDialogueAsset>(NewAsset);
+    if (!Asset)
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Created asset is not a DialogueAsset"));
+
+    // Initialize EditorGraph + Entry node (same logic as EnsureEditorGraph)
+    Asset->Modify();
+    Asset->EditorGraph = NewObject<UEdGraph>(Asset, NAME_None, RF_Transactional);
+    Asset->EditorGraph->Schema = UDialogueGraphSchema::StaticClass();
+
+    UDialogueEntryNode* EntryRuntime = NewObject<UDialogueEntryNode>(Asset);
+    EntryRuntime->NodeId = FGuid::NewGuid();
+    EntryRuntime->NodePosition = FVector2D(100.f, 100.f);
+    Asset->AllNodes.Add(EntryRuntime);
+    Asset->EntryNode = EntryRuntime;
+
+    UDialogueGraphNode* EntryGraphNode = NewObject<UDialogueGraphNode>(Asset->EditorGraph);
+    EntryGraphNode->RuntimeNode = EntryRuntime;
+    EntryGraphNode->CreateNewGuid();
+    EntryGraphNode->PostPlacedNewNode();
+    EntryGraphNode->NodePosX = 100.f;
+    EntryGraphNode->NodePosY = 100.f;
+    Asset->EditorGraph->AddNode(EntryGraphNode);
+    EntryGraphNode->AllocateDefaultPins();
+
+    Asset->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("asset_path"), AssetPath);
+    Result->SetStringField(TEXT("entry_node_id"), EntryRuntime->NodeId.ToString());
+    return Result;
+#else
+    return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Create requires editor build"));
+#endif
+}
 
 TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueNode(
     const TSharedPtr<FJsonObject>& Params)

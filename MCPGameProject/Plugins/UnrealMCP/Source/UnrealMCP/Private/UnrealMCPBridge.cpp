@@ -328,7 +328,8 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                 ResultJson = BehaviorTreeCommands->HandleCommand(CommandType, Params);
             }
             // Dialogue Commands
-            else if (CommandType == TEXT("get_dialogue_graph") ||
+            else if (CommandType == TEXT("create_dialogue_asset") ||
+                     CommandType == TEXT("get_dialogue_graph") ||
                      CommandType == TEXT("get_dialogue_connections") ||
                      CommandType == TEXT("add_dialogue_node") ||
                      CommandType == TEXT("set_dialogue_node_properties") ||

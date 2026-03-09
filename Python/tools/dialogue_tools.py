@@ -86,6 +86,25 @@ def register_dialogue_tools(mcp: FastMCP):
     # ================================================================
 
     @mcp.tool()
+    def create_dialogue_asset(
+        ctx: Context,
+        asset_path: str,
+    ) -> Dict[str, Any]:
+        """
+        Create a new DialogueAsset with a default Entry node.
+
+        Args:
+            asset_path: Content-browser path, e.g. "/Game/Dialogues/DA_Test".
+
+        Returns:
+            Dict with asset_path and entry_node_id.
+        """
+        try:
+            return _send("create_dialogue_asset", {"asset_path": asset_path})
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    @mcp.tool()
     def add_dialogue_node(
         ctx: Context,
         asset_path: str,

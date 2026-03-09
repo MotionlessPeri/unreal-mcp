@@ -627,16 +627,31 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDeleteDialogueNode(
         Schema->BreakPinLinks(*Pin, true);
     }
 
-    // Sweep ALL OutTransitions in the asset to remove references to the deleted node.
-    // This handles stale data from pre-bugfix assets where pin links were broken
-    // but OutTransitions still contain dangling references.
+    // Sweep ALL OutTransitions: remove references to the deleted node AND any dangling
+    // references (targets not in AllNodes). Handles stale data from pre-bugfix assets.
+    TSet<UDialogueNode*> ValidNodes;
+    for (UDialogueNode* N : Asset->AllNodes)
+    {
+        if (N && N != Node) // exclude the node about to be deleted
+        {
+            ValidNodes.Add(N);
+            if (UDialogueChoiceNode* C = Cast<UDialogueChoiceNode>(N))
+                for (auto& Item : C->Items)
+                    if (Item) ValidNodes.Add(Item.Get());
+        }
+    }
+
+    auto IsDangling = [&ValidNodes](const FDialogueTransition& T)
+    {
+        return !T.TargetNode || !ValidNodes.Contains(T.TargetNode.Get());
+    };
+
     for (UDialogueNode* OtherNode : Asset->AllNodes)
     {
         if (!OtherNode || OtherNode == Node) continue;
         if (UDialogueNodeWithTransitions* WithTrans = Cast<UDialogueNodeWithTransitions>(OtherNode))
         {
-            int32 Removed = WithTrans->OutTransitions.RemoveAll(
-                [Node](const FDialogueTransition& T){ return T.TargetNode == Node; });
+            int32 Removed = WithTrans->OutTransitions.RemoveAll(IsDangling);
             if (Removed > 0) WithTrans->Modify();
         }
         if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(OtherNode))
@@ -644,8 +659,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDeleteDialogueNode(
             for (UDialogueChoiceItemNode* Item : Choice->Items)
             {
                 if (!Item) continue;
-                int32 Removed = Item->OutTransitions.RemoveAll(
-                    [Node](const FDialogueTransition& T){ return T.TargetNode == Node; });
+                int32 Removed = Item->OutTransitions.RemoveAll(IsDangling);
                 if (Removed > 0) Item->Modify();
             }
         }

@@ -627,8 +627,29 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDeleteDialogueNode(
         Schema->BreakPinLinks(*Pin, true);
     }
 
-    // Also clean up any incoming transitions from other nodes that target this node
-    // (BreakPinLinks on our input pin already handles this via our Schema override)
+    // Sweep ALL OutTransitions in the asset to remove references to the deleted node.
+    // This handles stale data from pre-bugfix assets where pin links were broken
+    // but OutTransitions still contain dangling references.
+    for (UDialogueNode* OtherNode : Asset->AllNodes)
+    {
+        if (!OtherNode || OtherNode == Node) continue;
+        if (UDialogueNodeWithTransitions* WithTrans = Cast<UDialogueNodeWithTransitions>(OtherNode))
+        {
+            int32 Removed = WithTrans->OutTransitions.RemoveAll(
+                [Node](const FDialogueTransition& T){ return T.TargetNode == Node; });
+            if (Removed > 0) WithTrans->Modify();
+        }
+        if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(OtherNode))
+        {
+            for (UDialogueChoiceItemNode* Item : Choice->Items)
+            {
+                if (!Item) continue;
+                int32 Removed = Item->OutTransitions.RemoveAll(
+                    [Node](const FDialogueTransition& T){ return T.TargetNode == Node; });
+                if (Removed > 0) Item->Modify();
+            }
+        }
+    }
 
     // Remove from graph
     Asset->EditorGraph->RemoveNode(GraphNodeToRemove);

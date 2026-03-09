@@ -334,7 +334,8 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("set_dialogue_node_properties") ||
                      CommandType == TEXT("connect_dialogue_nodes") ||
                      CommandType == TEXT("disconnect_dialogue_nodes") ||
-                     CommandType == TEXT("delete_dialogue_node"))
+                     CommandType == TEXT("delete_dialogue_node") ||
+                     CommandType == TEXT("add_dialogue_choice_item"))
             {
                 ResultJson = DialogueCommands->HandleCommand(CommandType, Params);
             }

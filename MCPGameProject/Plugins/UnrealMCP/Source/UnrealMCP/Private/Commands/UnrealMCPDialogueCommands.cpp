@@ -37,6 +37,8 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCommand(
         return HandleDisconnectDialogueNodes(Params);
     if (CommandType == TEXT("delete_dialogue_node"))
         return HandleDeleteDialogueNode(Params);
+    if (CommandType == TEXT("add_dialogue_choice_item"))
+        return HandleAddDialogueChoiceItem(Params);
 
     return FUnrealMCPCommonUtils::CreateErrorResponse(
         FString::Printf(TEXT("Unknown dialogue command: %s"), *CommandType));
@@ -644,6 +646,73 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDeleteDialogueNode(
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetBoolField(TEXT("success"), true);
     Result->SetStringField(TEXT("deleted_node_id"), NodeIdStr);
+    return Result;
+#else
+    return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Write commands require editor build"));
+#endif
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueChoiceItem(
+    const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path'"));
+
+    FString NodeIdStr;
+    if (!Params->TryGetStringField(TEXT("node_id"), NodeIdStr))
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_id' (Choice node GUID)"));
+
+    TSharedPtr<FJsonObject> Error;
+    UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
+    if (!Asset) return Error;
+
+    UDialogueNode* Node = FindNodeByGuid(Asset, NodeIdStr);
+    if (!Node)
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Node '%s' not found"), *NodeIdStr));
+
+    UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node);
+    if (!Choice)
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Node is not a Choice node"));
+
+#if WITH_EDITORONLY_DATA
+    if (!Asset->EditorGraph)
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Asset has no EditorGraph"));
+
+    // Find the graph node for this Choice
+    UDialogueGraphNode* GraphNode = nullptr;
+    for (UEdGraphNode* GN : Asset->EditorGraph->Nodes)
+    {
+        UDialogueGraphNode* DGN = Cast<UDialogueGraphNode>(GN);
+        if (DGN && DGN->RuntimeNode == Choice)
+        {
+            GraphNode = DGN;
+            break;
+        }
+    }
+    if (!GraphNode)
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Graph node not found for Choice"));
+
+    // Use GraphNode::AddChoiceItem — creates ChoiceItemNode + reconstructs pins
+    GraphNode->AddChoiceItem();
+
+    // The new item is the last one
+    UDialogueChoiceItemNode* NewItem = Choice->Items.Last();
+
+    // Set optional choice_text
+    FString ChoiceText;
+    if (Params->TryGetStringField(TEXT("choice_text"), ChoiceText))
+    {
+        NewItem->ChoiceText = FText::FromString(ChoiceText);
+    }
+
+    Asset->MarkPackageDirty();
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetBoolField(TEXT("success"), true);
+    Result->SetStringField(TEXT("item_node_id"), NewItem->NodeId.ToString());
+    Result->SetNumberField(TEXT("item_index"), Choice->Items.Num() - 1);
     return Result;
 #else
     return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Write commands require editor build"));

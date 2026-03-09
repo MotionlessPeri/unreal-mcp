@@ -246,3 +246,32 @@ def register_dialogue_tools(mcp: FastMCP):
             })
         except Exception as e:
             return {"success": False, "message": f"Error: {e}"}
+
+    @mcp.tool()
+    def add_dialogue_choice_item(
+        ctx: Context,
+        asset_path: str,
+        node_id: str,
+        choice_text: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Add a new choice item to an existing Choice node.
+
+        Args:
+            asset_path: Content-browser path to the DialogueAsset.
+            node_id: GUID string of the Choice node.
+            choice_text: Optional text for the new choice item.
+
+        Returns:
+            Dict with item_node_id (GUID) and item_index.
+        """
+        try:
+            params: dict = {
+                "asset_path": asset_path,
+                "node_id": node_id,
+            }
+            if choice_text is not None:
+                params["choice_text"] = choice_text
+            return _send("add_dialogue_choice_item", params)
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}

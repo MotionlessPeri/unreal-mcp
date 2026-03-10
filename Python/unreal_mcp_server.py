@@ -9,6 +9,7 @@ import socket
 import sys
 import json
 import inspect
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
@@ -269,6 +270,18 @@ elif "instructions" in _fastmcp_init_params:
 
 mcp = FastMCP("UnrealMCP", **_fastmcp_kwargs)
 
+_SERVER_DIR = Path(__file__).resolve().parent
+_OPTIONAL_DIALOGUE_PLUGIN_PATHS = (
+    _SERVER_DIR.parent / "Plugins" / "UnrealMCPDialogue",
+    _SERVER_DIR.parent / "MCPGameProject" / "Plugins" / "UnrealMCPDialogue",
+)
+_OPTIONAL_LOGICDRIVER_PLUGIN_PATHS = (
+    _SERVER_DIR.parent / "Plugins" / "UnrealMCPLogicDriver",
+    _SERVER_DIR.parent / "MCPGameProject" / "Plugins" / "UnrealMCPLogicDriver",
+)
+_HAS_DIALOGUE_EXTENSION = any(path.exists() for path in _OPTIONAL_DIALOGUE_PLUGIN_PATHS)
+_HAS_LOGICDRIVER_EXTENSION = any(path.exists() for path in _OPTIONAL_LOGICDRIVER_PLUGIN_PATHS)
+
 # Import and register tools
 from tools.editor_tools import register_editor_tools
 from tools.blueprint_tools import register_blueprint_tools
@@ -276,7 +289,11 @@ from tools.node_tools import register_blueprint_node_tools
 from tools.project_tools import register_project_tools
 from tools.umg_tools import register_umg_tools
 from tools.behavior_tree_tools import register_behavior_tree_tools
-from tools.dialogue_tools import register_dialogue_tools
+from tools.animation_tools import register_animation_tools
+if _HAS_DIALOGUE_EXTENSION:
+    from tools.dialogue_tools import register_dialogue_tools
+if _HAS_LOGICDRIVER_EXTENSION:
+    from tools.logicdriver_tools import register_logicdriver_tools
 
 # Register tools
 register_editor_tools(mcp)
@@ -285,7 +302,17 @@ register_blueprint_node_tools(mcp)
 register_project_tools(mcp)
 register_umg_tools(mcp)
 register_behavior_tree_tools(mcp)
-register_dialogue_tools(mcp)
+register_animation_tools(mcp)
+if _HAS_DIALOGUE_EXTENSION:
+    logger.info("Registering Dialogue tools because UnrealMCPDialogue extension is present")
+    register_dialogue_tools(mcp)
+else:
+    logger.info("Skipping Dialogue tools because UnrealMCPDialogue extension is not present")
+if _HAS_LOGICDRIVER_EXTENSION:
+    logger.info("Registering Logic Driver tools because UnrealMCPLogicDriver extension is present")
+    register_logicdriver_tools(mcp)
+else:
+    logger.info("Skipping Logic Driver tools because UnrealMCPLogicDriver extension is not present")
 
 @mcp.prompt()
 def info():

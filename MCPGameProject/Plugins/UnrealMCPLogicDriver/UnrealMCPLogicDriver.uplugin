@@ -2,21 +2,21 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "1.0",
-	"FriendlyName": "UnrealMCP",
-	"Description": "Model Context Protocol implementation for Unreal Engine",
+	"FriendlyName": "UnrealMCPLogicDriver",
+	"Description": "Logic Driver graph read extension plugin for UnrealMCP",
 	"Category": "Editor",
-	"CreatedBy": "Your Name",
+	"CreatedBy": "OpenAI",
 	"CreatedByURL": "",
 	"DocsURL": "",
 	"MarketplaceURL": "",
 	"SupportURL": "",
-	"CanContainContent": true,
+	"CanContainContent": false,
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
 	"Installed": false,
 	"Modules": [
 		{
-			"Name": "UnrealMCP",
+			"Name": "UnrealMCPLogicDriver",
 			"Type": "Editor",
 			"LoadingPhase": "Default",
 			"WhitelistPlatforms": [
@@ -28,8 +28,16 @@
 	],
 	"Plugins": [
 		{
+			"Name": "UnrealMCP",
+			"Enabled": true
+		},
+		{
 			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		},
+		{
+			"Name": "SMSystem",
 			"Enabled": true
 		}
 	]
-} 
+}

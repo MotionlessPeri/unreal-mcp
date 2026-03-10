@@ -11,12 +11,51 @@
 7. 2026-02-25 (blueprint graph size/overlap metadata for layout tooling)
 8. 2026-03-06 (dialogue system read commands + live smoke validation)
 9. 2026-03-09 (MCP-2: dialogue system write commands + persistent NodeId)
+10. 2026-03-09 (split DialogueSystem support into optional extension plugin)
+11. 2026-03-09 (Logic Driver full state machine graph read extension)
+12. 2026-03-09 (AnimMontage read support in base UnrealMCP)
 
 ## Current Milestone
 
 1. Stabilize blueprint graph automation for consumer projects (`StupidChess` as first consumer).
 
 ## Completed
+
+1. UnrealMCP consumer split: optional DialogueSystem extension plugin (2026-03-09):
+   - removed direct `DialogueSystem` / `DialogueSystemEditor` dependencies from base `UnrealMCP`.
+   - added extensible command registry in base plugin so consumer-specific command groups can register without coupling the core module.
+   - moved dialogue commands into new `MCPGameProject/Plugins/UnrealMCPDialogue` editor plugin.
+   - Python server now registers `dialogue_tools` only when `UnrealMCPDialogue` is present beside the consumer project or source repo.
+   - result: generic consumers such as `BattleDemo` can sync `UnrealMCP` without inheriting DialogueSystem compile dependencies.
+
+1. Logic Driver graph read extension plugin (2026-03-09):
+   - added `MCPGameProject/Plugins/UnrealMCPLogicDriver` as an optional consumer extension plugin.
+   - added `get_logicdriver_state_machine_graph` command to read a full Logic Driver state machine graph.
+   - transition serialization now includes:
+     - `from_node_id` / `to_node_id`
+     - `transition_name`
+     - `conditional_evaluation_type`
+     - `condition_graph` with nested nodes, edges, and result node
+   - graph response includes `nodes`, `states`, `special_nodes`, `transitions`, `edges`, and `entry_node`.
+   - Python server now registers `logicdriver_tools` only when `UnrealMCPLogicDriver` is present beside the consumer project or source repo.
+   - BattleDemo runtime smoke validated against `BP_InputSM`:
+     - root graph read succeeded
+     - transition condition subgraphs were returned
+     - sample transitions included both `SM_Graph` and `SM_AlwaysTrue` evaluation types.
+
+1. AnimMontage read support in base UnrealMCP (2026-03-09):
+   - added `get_montage_info` to base `UnrealMCP` for UE-native animation asset reads.
+   - command accepts content-browser paths, object paths, or full class-qualified object paths for `UAnimMontage`.
+   - response now includes:
+     - `sections`
+     - `slot_tracks` with segment context
+     - normalized `notifies` covering `notify`, `notify_state`, and `branching_point`
+     - `branching_points` summary derived from montage branching-point notifies
+   - each notify includes timing, track metadata, section name, slot/segment context, linked sequence path, and notify class names.
+   - BattleDemo runtime smoke validated against `AS_Combo_Attack_01_01_Seq_Montage`:
+     - read succeeded using full class-qualified object path
+     - returned `notify_count=11`
+     - returned both `notify` and `notify_state` entries with per-notify timing and track data.
 
 1. MCP-2: Dialogue System write commands (2026-03-09):
    - **Prerequisite**: Added persistent `FGuid NodeId` to `UDialogueNode` (consumer-side). `PostLoad()` auto-generates GUID for existing assets. All MCP read commands now use `NodeId.ToString()` instead of `UObject::GetName()`.

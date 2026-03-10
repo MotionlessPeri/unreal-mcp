@@ -30,6 +30,7 @@ The Unreal MCP integration provides comprehensive tools for controlling Unreal E
 | **Actor Management** | • Create and delete actors (cubes, spheres, lights, cameras, etc.)<br>• Set actor transforms (position, rotation, scale)<br>• Query actor properties and find actors by name<br>• List all actors in the current level |
 | **Blueprint Development** | • Create new Blueprint classes with custom components<br>• Add and configure components (mesh, camera, light, etc.)<br>• Set component properties and physics settings<br>• Compile Blueprints and spawn Blueprint actors<br>• Create input mappings for player controls |
 | **Blueprint Node Graph** | • Add event nodes (BeginPlay, Tick, etc.)<br>• Create function call nodes and connect them<br>• Add variables with custom types and default values<br>• Create component and self references<br>• Find and manage nodes in the graph |
+| **Animation Assets** | • Read `AnimMontage` sections, slot tracks, and segments<br>• Read normalized `AnimNotify`, `AnimNotifyState`, and branching point data<br>• Map notifies back to section / slot / linked sequence context |
 | **Editor Control** | • Focus viewport on specific actors or locations<br>• Control viewport camera orientation and distance |
 
 All these capabilities are accessible through natural language commands via AI assistants, making it easy to automate and control Unreal Engine workflows.
@@ -45,6 +46,17 @@ All these capabilities are accessible through natural language commands via AI a
 - Implements actor manipulation tools
 - Handles command execution and response handling
 
+### Optional Extension Plugins
+- `MCPGameProject/Plugins/UnrealMCPDialogue`
+  - DialogueSystem-specific MCP commands
+  - Depends on `UnrealMCP` plus consumer DialogueSystem modules
+  - Sync this only in projects that actually include DialogueSystem
+- `MCPGameProject/Plugins/UnrealMCPLogicDriver`
+  - Logic Driver state machine graph read commands
+  - Depends on `UnrealMCP` plus consumer `SMSystem` / `SMSystemEditor`
+  - Exposes full state machine graph reads including each transition's condition subgraph
+  - Sync this only in projects that actually include Logic Driver
+
 ### Python MCP Server `Python/unreal_mcp_server.py`
 - Implemented in `unreal_mcp_server.py`
 - Manages TCP socket connections to the C++ plugin (port 55557)
@@ -59,6 +71,8 @@ All these capabilities are accessible through natural language commands via AI a
   - **Plugins/UnrealMCP/** - C++ plugin source
     - **Source/UnrealMCP/** - Plugin source code
     - **UnrealMCP.uplugin** - Plugin definition
+  - **Plugins/UnrealMCPDialogue/** - Optional DialogueSystem extension plugin
+  - **Plugins/UnrealMCPLogicDriver/** - Optional Logic Driver extension plugin
 
 - **Python/** - Python server and tools
   - **tools/** - Tool modules for actor, editor, and blueprint operations
@@ -97,6 +111,7 @@ Otherwise, if you want to use the plugin in your existing project:
 
 1. **Copy the plugin to your project**
    - Copy `MCPGameProject/Plugins/UnrealMCP` to your project's Plugins folder
+   - Copy optional extension plugins only when the consumer project has the required dependencies
 
 2. **Enable the plugin**
    - Edit > Plugins
@@ -116,6 +131,11 @@ See [Python/README.md](Python/README.md) for detailed Python setup instructions,
 - Setting up your Python environment
 - Running the MCP server
 - Using direct or server-based connections
+
+The Python server auto-registers extension tools only when it detects the matching
+optional plugin alongside the project or source repo:
+- `UnrealMCPDialogue` -> Dialogue tools
+- `UnrealMCPLogicDriver` -> Logic Driver tools
 
 ### Configuring your MCP Client
 

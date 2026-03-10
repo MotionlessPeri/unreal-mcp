@@ -2,21 +2,21 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "1.0",
-	"FriendlyName": "UnrealMCP",
-	"Description": "Model Context Protocol implementation for Unreal Engine",
+	"FriendlyName": "UnrealMCPDialogue",
+	"Description": "Dialogue System extension plugin for UnrealMCP",
 	"Category": "Editor",
 	"CreatedBy": "Your Name",
 	"CreatedByURL": "",
 	"DocsURL": "",
 	"MarketplaceURL": "",
 	"SupportURL": "",
-	"CanContainContent": true,
+	"CanContainContent": false,
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
 	"Installed": false,
 	"Modules": [
 		{
-			"Name": "UnrealMCP",
+			"Name": "UnrealMCPDialogue",
 			"Type": "Editor",
 			"LoadingPhase": "Default",
 			"WhitelistPlatforms": [
@@ -28,8 +28,16 @@
 	],
 	"Plugins": [
 		{
+			"Name": "UnrealMCP",
+			"Enabled": true
+		},
+		{
 			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		},
+		{
+			"Name": "DialogueSystem",
 			"Enabled": true
 		}
 	]
-} 
+}

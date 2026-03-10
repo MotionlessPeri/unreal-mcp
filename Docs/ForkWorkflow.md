@@ -12,6 +12,8 @@ This fork is maintained for real consumer projects (for example: `StupidChess`).
 1. Source of truth for MCP changes: this fork repo.
 2. Consumer project copies plugin source from:
    - `MCPGameProject/Plugins/UnrealMCP`
+   - optional consumer-specific extension plugins, for example `MCPGameProject/Plugins/UnrealMCPDialogue`
+   - optional graph/domain extensions, for example `MCPGameProject/Plugins/UnrealMCPLogicDriver`
 3. Python server/tooling is used from this repo directly (not copied into consumer runtime builds).
 4. Consumer repos should avoid direct edits under vendored plugin copies:
    - implement MCP changes in this fork first
@@ -21,6 +23,7 @@ This fork is maintained for real consumer projects (for example: `StupidChess`).
 
 1. Implement + validate in this fork.
 2. In consumer repo, sync plugin code from fork (for `StupidChess` this is done via `tools/sync_unreal_mcp.ps1`).
+   - sync only the extension plugins that the consumer actually depends on.
 3. Rebuild consumer UE editor target.
 4. Restart editor and run command-level smoke flow.
 

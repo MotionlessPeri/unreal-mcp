@@ -56,9 +56,10 @@
 #include "Commands/UnrealMCPBlueprintNodeCommands.h"
 #include "Commands/UnrealMCPProjectCommands.h"
 #include "Commands/UnrealMCPCommonUtils.h"
+#include "Commands/UnrealMCPCommandRegistry.h"
 #include "Commands/UnrealMCPUMGCommands.h"
 #include "Commands/UnrealMCPBehaviorTreeCommands.h"
-#include "Commands/UnrealMCPDialogueCommands.h"
+#include "Commands/UnrealMCPAnimationCommands.h"
 
 // Default settings
 #define MCP_SERVER_HOST "127.0.0.1"
@@ -72,7 +73,7 @@ UUnrealMCPBridge::UUnrealMCPBridge()
     ProjectCommands = MakeShared<FUnrealMCPProjectCommands>();
     UMGCommands = MakeShared<FUnrealMCPUMGCommands>();
     BehaviorTreeCommands = MakeShared<FUnrealMCPBehaviorTreeCommands>();
-    DialogueCommands = MakeShared<FUnrealMCPDialogueCommands>();
+    AnimationCommands = MakeShared<FUnrealMCPAnimationCommands>();
 }
 
 UUnrealMCPBridge::~UUnrealMCPBridge()
@@ -83,7 +84,7 @@ UUnrealMCPBridge::~UUnrealMCPBridge()
     ProjectCommands.Reset();
     UMGCommands.Reset();
     BehaviorTreeCommands.Reset();
-    DialogueCommands.Reset();
+    AnimationCommands.Reset();
 }
 
 // Initialize subsystem
@@ -327,18 +328,15 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
             {
                 ResultJson = BehaviorTreeCommands->HandleCommand(CommandType, Params);
             }
-            // Dialogue Commands
-            else if (CommandType == TEXT("create_dialogue_asset") ||
-                     CommandType == TEXT("get_dialogue_graph") ||
-                     CommandType == TEXT("get_dialogue_connections") ||
-                     CommandType == TEXT("add_dialogue_node") ||
-                     CommandType == TEXT("set_dialogue_node_properties") ||
-                     CommandType == TEXT("connect_dialogue_nodes") ||
-                     CommandType == TEXT("disconnect_dialogue_nodes") ||
-                     CommandType == TEXT("delete_dialogue_node") ||
-                     CommandType == TEXT("add_dialogue_choice_item"))
+            // Animation Commands
+            else if (CommandType == TEXT("get_montage_info"))
             {
-                ResultJson = DialogueCommands->HandleCommand(CommandType, Params);
+                ResultJson = AnimationCommands->HandleCommand(CommandType, Params);
+            }
+            else if (TSharedPtr<IUnrealMCPCommandHandler> ExtensionHandler =
+                FUnrealMCPCommandRegistry::Get().FindHandlerForCommand(CommandType))
+            {
+                ResultJson = ExtensionHandler->HandleCommand(CommandType, Params);
             }
             else
             {

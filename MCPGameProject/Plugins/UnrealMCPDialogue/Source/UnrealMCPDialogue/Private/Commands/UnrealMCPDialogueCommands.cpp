@@ -378,13 +378,13 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCreateDialogueAsset(
 	Asset->EditorGraph = NewObject<UEdGraph>(Asset, NAME_None, RF_Transactional);
 	Asset->EditorGraph->Schema = UDialogueGraphSchema::StaticClass();
 
-	UDialogueEntryNode* EntryRuntime = NewObject<UDialogueEntryNode>(Asset);
+	UDialogueEntryNode* EntryRuntime = NewObject<UDialogueEntryNode>(Asset, NAME_None, RF_Transactional);
 	EntryRuntime->NodeId = FGuid::NewGuid();
 	EntryRuntime->NodePosition = FVector2D(100.f, 100.f);
 	Asset->AllNodes.Add(EntryRuntime);
 	Asset->EntryNode = EntryRuntime;
 
-	UDialogueGraphNode* EntryGraphNode = NewObject<UDialogueGraphNode>(Asset->EditorGraph);
+	UDialogueGraphNode* EntryGraphNode = NewObject<UDialogueGraphNode>(Asset->EditorGraph, NAME_None, RF_Transactional);
 	EntryGraphNode->RuntimeNode = EntryRuntime;
 	EntryGraphNode->CreateNewGuid();
 	EntryGraphNode->PostPlacedNewNode();
@@ -457,20 +457,20 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueNode(
 	Params->TryGetNumberField(TEXT("pos_x"), PosX);
 	Params->TryGetNumberField(TEXT("pos_y"), PosY);
 
-	UDialogueNode* RuntimeNode = NewObject<UDialogueNode>(Asset, NodeClass);
+	UDialogueNode* RuntimeNode = NewObject<UDialogueNode>(Asset, NodeClass, NAME_None, RF_Transactional);
 	RuntimeNode->NodeId = FGuid::NewGuid();
 	RuntimeNode->NodePosition = FVector2D(PosX, PosY);
 
 	if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(RuntimeNode))
 	{
-		UDialogueChoiceItemNode* Item = NewObject<UDialogueChoiceItemNode>(RuntimeNode);
+		UDialogueChoiceItemNode* Item = NewObject<UDialogueChoiceItemNode>(RuntimeNode, NAME_None, RF_Transactional);
 		Item->NodeId = FGuid::NewGuid();
 		Choice->Items.Add(Item);
 	}
 
 	Asset->AllNodes.Add(RuntimeNode);
 
-	UDialogueGraphNode* GraphNode = NewObject<UDialogueGraphNode>(Asset->EditorGraph);
+	UDialogueGraphNode* GraphNode = NewObject<UDialogueGraphNode>(Asset->EditorGraph, NAME_None, RF_Transactional);
 	GraphNode->RuntimeNode = RuntimeNode;
 	GraphNode->CreateNewGuid();
 	GraphNode->PostPlacedNewNode();

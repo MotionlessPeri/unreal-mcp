@@ -25,7 +25,8 @@ namespace
 				CommandType == TEXT("connect_dialogue_nodes") ||
 				CommandType == TEXT("disconnect_dialogue_nodes") ||
 				CommandType == TEXT("delete_dialogue_node") ||
-				CommandType == TEXT("add_dialogue_choice_item");
+				CommandType == TEXT("add_dialogue_choice_item") ||
+				CommandType == TEXT("set_transition_condition");
 		}
 
 		virtual TSharedPtr<FJsonObject> HandleCommand(

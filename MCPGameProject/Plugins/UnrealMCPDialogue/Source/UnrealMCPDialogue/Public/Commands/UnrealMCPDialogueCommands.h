@@ -30,6 +30,7 @@ private:
 	TSharedPtr<FJsonObject> HandleDisconnectDialogueNodes(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleDeleteDialogueNode(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleAddDialogueChoiceItem(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetTransitionCondition(const TSharedPtr<FJsonObject>& Params);
 
 	UDialogueAsset* LoadDialogueAsset(const FString& AssetPath, TSharedPtr<FJsonObject>& OutError);
 	UDialogueNode* FindNodeByGuid(UDialogueAsset* Asset, const FString& NodeIdStr);

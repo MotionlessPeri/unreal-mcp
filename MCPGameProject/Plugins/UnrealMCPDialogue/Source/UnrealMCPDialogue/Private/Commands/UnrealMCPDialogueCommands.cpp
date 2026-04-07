@@ -9,6 +9,8 @@
 #include "DialogueEdgeTypes.h"
 #include "DialogueGraphNode.h"
 #include "DialogueGraphSchema.h"
+#include "DialogueSpeakerAsset.h"
+#include "DialogueConditionEvaluator.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphSchema.h"
 
@@ -38,6 +40,8 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCommand(
 		return HandleDeleteDialogueNode(Params);
 	if (CommandType == TEXT("add_dialogue_choice_item"))
 		return HandleAddDialogueChoiceItem(Params);
+	if (CommandType == TEXT("set_transition_condition"))
+		return HandleSetTransitionCondition(Params);
 
 	return FUnrealMCPCommonUtils::CreateErrorResponse(
 		FString::Printf(TEXT("Unknown dialogue command: %s"), *CommandType));
@@ -232,11 +236,15 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueGraph(
 
 		if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
 		{
-			NodeObj->SetStringField(TEXT("speaker_name"), Speech->SpeakerName.ToString());
+			NodeObj->SetStringField(TEXT("speaker_name"), Speech->GetDisplaySpeakerName().ToString());
+			NodeObj->SetStringField(TEXT("speaker_asset_path"), Speech->Speaker ? Speech->Speaker->GetPathName() : TEXT(""));
 			NodeObj->SetStringField(TEXT("dialogue_text"), Speech->DialogueText.ToString());
 		}
 		else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
 		{
+			NodeObj->SetStringField(TEXT("speaker_name"), Choice->GetDisplaySpeakerName().ToString());
+			NodeObj->SetStringField(TEXT("speaker_asset_path"), Choice->Speaker ? Choice->Speaker->GetPathName() : TEXT(""));
+			NodeObj->SetStringField(TEXT("dialogue_text"), Choice->DialogueText.ToString());
 			TArray<TSharedPtr<FJsonValue>> ChoicesArr;
 			for (const TObjectPtr<UDialogueChoiceItemNode>& Item : Choice->Items)
 			{
@@ -417,7 +425,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueNode(
 	FString NodeType;
 	if (!Params->TryGetStringField(TEXT("node_type"), NodeType))
 	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_type' (Speech, Choice, Exit)"));
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_type' (Speech, Choice, Exit, Reroute)"));
 	}
 
 	TSharedPtr<FJsonObject> Error;
@@ -446,10 +454,14 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueNode(
 	{
 		NodeClass = UDialogueExitNode::StaticClass();
 	}
+	else if (NodeType == TEXT("Reroute"))
+	{
+		NodeClass = UDialogueRerouteNode::StaticClass();
+	}
 	else
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("Invalid node_type '%s'. Must be Speech, Choice, or Exit."), *NodeType));
+			FString::Printf(TEXT("Invalid node_type '%s'. Must be Speech, Choice, Exit, or Reroute."), *NodeType));
 	}
 
 	double PosX = 0.0;
@@ -534,24 +546,54 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetDialogueNodePropert
 
 	Node->Modify();
 
-	if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
+	// --- Speaker asset (Speech and Choice nodes) ---
+	FString SpeakerPath;
+	if (Params->TryGetStringField(TEXT("speaker_asset_path"), SpeakerPath))
 	{
-		FString Val;
-		if (Params->TryGetStringField(TEXT("speaker_name"), Val))
+		UObject* SpeakerObj = UEditorAssetLibrary::LoadAsset(SpeakerPath);
+		if (!SpeakerObj)
 		{
-			Speech->SpeakerName = FText::FromString(Val);
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Could not load asset at '%s'"), *SpeakerPath));
 		}
-		if (Params->TryGetStringField(TEXT("dialogue_text"), Val))
+		UDialogueSpeakerAsset* SpeakerAsset = Cast<UDialogueSpeakerAsset>(SpeakerObj);
+		if (!SpeakerAsset)
 		{
-			Speech->DialogueText = FText::FromString(Val);
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Asset at '%s' is not a UDialogueSpeakerAsset (class: %s)"),
+					*SpeakerPath, *SpeakerObj->GetClass()->GetName()));
+		}
+		if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
+		{
+			Speech->Speaker = SpeakerAsset;
+		}
+		else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
+		{
+			Choice->Speaker = SpeakerAsset;
 		}
 	}
-	else if (UDialogueChoiceItemNode* Item = Cast<UDialogueChoiceItemNode>(Node))
+
+	// --- dialogue_text (Speech and Choice nodes) ---
+	FString DialogueTextVal;
+	if (Params->TryGetStringField(TEXT("dialogue_text"), DialogueTextVal))
 	{
-		FString Val;
-		if (Params->TryGetStringField(TEXT("choice_text"), Val))
+		if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
 		{
-			Item->ChoiceText = FText::FromString(Val);
+			Speech->DialogueText = FText::FromString(DialogueTextVal);
+		}
+		else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
+		{
+			Choice->DialogueText = FText::FromString(DialogueTextVal);
+		}
+	}
+
+	// --- choice_text (ChoiceItem only) ---
+	if (UDialogueChoiceItemNode* Item = Cast<UDialogueChoiceItemNode>(Node))
+	{
+		FString ChoiceTextVal;
+		if (Params->TryGetStringField(TEXT("choice_text"), ChoiceTextVal))
+		{
+			Item->ChoiceText = FText::FromString(ChoiceTextVal);
 		}
 	}
 
@@ -967,4 +1009,100 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueChoiceItem(
 #else
 	return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Write commands require editor build"));
 #endif
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path'"));
+	}
+
+	FString FromNodeIdStr;
+	if (!Params->TryGetStringField(TEXT("from_node_id"), FromNodeIdStr))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'from_node_id'"));
+	}
+
+	FString ToNodeIdStr;
+	if (!Params->TryGetStringField(TEXT("to_node_id"), ToNodeIdStr))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'to_node_id'"));
+	}
+
+	TSharedPtr<FJsonObject> Error;
+	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
+	if (!Asset)
+	{
+		return Error;
+	}
+
+	UDialogueNode* FromNode = FindNodeByGuid(Asset, FromNodeIdStr);
+	if (!FromNode)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Source node '%s' not found"), *FromNodeIdStr));
+	}
+
+	UDialogueNodeWithTransitions* TransNode = Cast<UDialogueNodeWithTransitions>(FromNode);
+	if (!TransNode)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Node '%s' does not support transitions"), *FromNodeIdStr));
+	}
+
+	UDialogueNode* ToNode = FindNodeByGuid(Asset, ToNodeIdStr);
+	if (!ToNode)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Target node '%s' not found"), *ToNodeIdStr));
+	}
+
+	// Find the transition matching TargetNode
+	FDialogueTransition* FoundTransition = nullptr;
+	for (FDialogueTransition& Trans : TransNode->OutTransitions)
+	{
+		if (Trans.TargetNode == ToNode)
+		{
+			FoundTransition = &Trans;
+			break;
+		}
+	}
+
+	if (!FoundTransition)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("No transition from '%s' to '%s'"), *FromNodeIdStr, *ToNodeIdStr));
+	}
+
+	TransNode->Modify();
+
+	// Load condition class or clear it
+	FString ConditionPath;
+	if (Params->TryGetStringField(TEXT("condition_class_path"), ConditionPath) && !ConditionPath.IsEmpty())
+	{
+		UClass* CondClass = LoadClass<UDialogueConditionEvaluator>(nullptr, *ConditionPath);
+		if (!CondClass)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Could not load condition class at '%s'"), *ConditionPath));
+		}
+		FoundTransition->ConditionClass = CondClass;
+	}
+	else
+	{
+		FoundTransition->ConditionClass = nullptr;
+	}
+
+	Asset->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("from_node_id"), FromNodeIdStr);
+	Result->SetStringField(TEXT("to_node_id"), ToNodeIdStr);
+	Result->SetStringField(TEXT("condition_class"),
+		FoundTransition->ConditionClass ? FoundTransition->ConditionClass->GetPathName() : TEXT(""));
+	return Result;
 }

@@ -186,6 +186,9 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueGraph(
 			TEXT("Missing 'asset_path' parameter (e.g. \"/Game/Dialogues/DA_Test\")"));
 	}
 
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {TEXT("asset_path")}))
+		return Err;
+
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
 	if (!Asset)
@@ -277,6 +280,9 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueConnections
 			TEXT("Missing 'asset_path' parameter (e.g. \"/Game/Dialogues/DA_Test\")"));
 	}
 
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {TEXT("asset_path")}))
+		return Err;
+
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
 	if (!Asset)
@@ -347,6 +353,9 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCreateDialogueAsset(
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path'"));
 	}
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {TEXT("asset_path")}))
+		return Err;
 
 	if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
 	{
@@ -427,6 +436,9 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueNode(
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_type' (Speech, Choice, Exit, Reroute)"));
 	}
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {TEXT("asset_path"), TEXT("node_type"), TEXT("pos_x"), TEXT("pos_y")}))
+		return Err;
 
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
@@ -529,6 +541,11 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetDialogueNodePropert
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_id'"));
 	}
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("node_id"), TEXT("speaker_name"), TEXT("speaker_asset_path"),
+		 TEXT("dialogue_text"), TEXT("choice_text"), TEXT("pos_x"), TEXT("pos_y")}))
+		return Err;
 
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
@@ -658,6 +675,10 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleConnectDialogueNodes(
 	FString FromPin = TEXT("Out");
 	Params->TryGetStringField(TEXT("from_pin"), FromPin);
 
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("from_node_id"), TEXT("to_node_id"), TEXT("from_pin")}))
+		return Err;
+
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
 	if (!Asset)
@@ -736,6 +757,10 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDisconnectDialogueNode
 	FString FromPin = TEXT("Out");
 	Params->TryGetStringField(TEXT("from_pin"), FromPin);
 
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("from_node_id"), TEXT("to_node_id"), TEXT("from_pin")}))
+		return Err;
+
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
 	if (!Asset)
@@ -805,6 +830,9 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDeleteDialogueNode(
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_id'"));
 	}
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {TEXT("asset_path"), TEXT("node_id")}))
+		return Err;
 
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
@@ -949,6 +977,10 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueChoiceItem(
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_id' (Choice node GUID)"));
 	}
 
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("node_id"), TEXT("choice_text")}))
+		return Err;
+
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
 	if (!Asset)
@@ -1031,6 +1063,10 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'to_node_id'"));
 	}
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("from_node_id"), TEXT("to_node_id"), TEXT("condition_class_path")}))
+		return Err;
 
 	TSharedPtr<FJsonObject> Error;
 	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);

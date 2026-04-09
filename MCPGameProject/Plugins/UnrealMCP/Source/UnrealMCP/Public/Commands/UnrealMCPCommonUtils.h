@@ -58,6 +58,15 @@ public:
     static UK2Node_Event* FindExistingEventNode(UEdGraph* Graph, const FString& EventName);
 
     // Property utilities
-    static bool SetObjectProperty(UObject* Object, const FString& PropertyName, 
+    static bool SetObjectProperty(UObject* Object, const FString& PropertyName,
                                  const TSharedPtr<FJsonValue>& Value, FString& OutErrorMessage);
-}; 
+
+    /**
+     * Check for unknown parameter keys in a JSON params object.
+     * Returns an error response listing the unknown keys, or nullptr if all keys are known.
+     * Usage: call after parsing known params; if result is non-null, return it as the command response.
+     */
+    static TSharedPtr<FJsonObject> CheckUnknownParams(
+        const TSharedPtr<FJsonObject>& Params,
+        const TSet<FString>& KnownKeys);
+};

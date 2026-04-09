@@ -1007,4 +1007,27 @@ bool FUnrealMCPCommonUtils::SetObjectProperty(UObject* Object, const FString& Pr
     OutErrorMessage = FString::Printf(TEXT("Unsupported property type: %s for property %s"),
                                     *Property->GetClass()->GetName(), *PropertyName);
     return false;
-} 
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPCommonUtils::CheckUnknownParams(
+    const TSharedPtr<FJsonObject>& Params,
+    const TSet<FString>& KnownKeys)
+{
+    if (!Params.IsValid()) return nullptr;
+
+    TArray<FString> UnknownKeys;
+    for (const auto& Pair : Params->Values)
+    {
+        if (!KnownKeys.Contains(Pair.Key))
+        {
+            UnknownKeys.Add(Pair.Key);
+        }
+    }
+
+    if (UnknownKeys.Num() == 0) return nullptr;
+
+    return CreateErrorResponse(FString::Printf(
+        TEXT("Unknown parameter(s): %s. Known parameters: %s"),
+        *FString::Join(UnknownKeys, TEXT(", ")),
+        *FString::JoinBy(KnownKeys.Array(), TEXT(", "), [](const FString& S) { return S; })));
+}

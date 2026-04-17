@@ -10,4 +10,5 @@ Welcome to the documentation for the Unreal Engine Model Context Protocol (MCP) 
    - [LogicDriver Extension Commands](commands-logicdriver.md) - Commands from the optional LogicDriver plugin.
 3. [Tools](Tools/README.md) - Tool reference and command surface (legacy).
 4. [Progress](Progress.md) - Current implementation status and near-term roadmap.
-5. [Fork Workflow](ForkWorkflow.md) - How to maintain this fork and sync into consumer projects.
+5. [Capability Gaps](CapabilityGaps.md) - Tiered backlog of missing introspection features (discovered from live agent usage).
+6. [Fork Workflow](ForkWorkflow.md) - How to maintain this fork and sync into consumer projects.

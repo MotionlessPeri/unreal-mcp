@@ -63,7 +63,11 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleCommand(const FString
     {
         return HandleSetPawnProperties(Params);
     }
-    
+    else if (CommandType == TEXT("get_blueprint_info"))
+    {
+        return HandleGetBlueprintInfo(Params);
+    }
+
     return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown blueprint command: %s"), *CommandType));
 }
 
@@ -1159,6 +1163,138 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleSetPawnProperties(con
     return ResponseObj;
 }
 
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleGetBlueprintInfo(const TSharedPtr<FJsonObject>& Params)
+{
+    FString BlueprintName;
+    if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+    }
+
+    UBlueprint* Blueprint = FUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
+    if (!Blueprint)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("blueprint_name"), BlueprintName);
+    Result->SetStringField(TEXT("path"), Blueprint->GetPathName());
+
+    // Parent class
+    if (Blueprint->ParentClass)
+    {
+        Result->SetStringField(TEXT("parent_class"), Blueprint->ParentClass->GetPathName());
+        Result->SetStringField(TEXT("parent_class_short"), Blueprint->ParentClass->GetName());
+    }
+
+    // Generated class
+    if (Blueprint->GeneratedClass)
+    {
+        Result->SetStringField(TEXT("generated_class"), Blueprint->GeneratedClass->GetPathName());
+    }
+
+    // Blueprint type
+    const UEnum* BlueprintTypeEnum = StaticEnum<EBlueprintType>();
+    if (BlueprintTypeEnum)
+    {
+        Result->SetStringField(TEXT("blueprint_type"),
+            BlueprintTypeEnum->GetNameStringByValue(static_cast<int64>(Blueprint->BlueprintType)));
+    }
+
+    // Implemented interfaces
+    TArray<TSharedPtr<FJsonValue>> InterfacesArr;
+    for (const FBPInterfaceDescription& Interface : Blueprint->ImplementedInterfaces)
+    {
+        if (!Interface.Interface) continue;
+        TSharedPtr<FJsonObject> IfaceObj = MakeShared<FJsonObject>();
+        IfaceObj->SetStringField(TEXT("name"), Interface.Interface->GetName());
+        IfaceObj->SetStringField(TEXT("path"), Interface.Interface->GetPathName());
+        IfaceObj->SetNumberField(TEXT("graph_count"), Interface.Graphs.Num());
+        InterfacesArr.Add(MakeShared<FJsonValueObject>(IfaceObj));
+    }
+    Result->SetArrayField(TEXT("implemented_interfaces"), InterfacesArr);
+
+    // Components: split into SCS-added (BP-level) and native (inherited from parent class CDO).
+    TArray<TSharedPtr<FJsonValue>> ComponentsArr;
+    TSet<FName> SCSComponentNames;
+
+    auto MakeComponentJson = [](UActorComponent* Component,
+                                const FName& ComponentName,
+                                bool bIsNative,
+                                const FString& ParentSocketName) -> TSharedPtr<FJsonObject>
+    {
+        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+        Obj->SetStringField(TEXT("name"), ComponentName.ToString());
+        if (Component && Component->GetClass())
+        {
+            Obj->SetStringField(TEXT("component_class"), Component->GetClass()->GetPathName());
+            Obj->SetStringField(TEXT("component_class_short"), Component->GetClass()->GetName());
+        }
+        Obj->SetBoolField(TEXT("is_native"), bIsNative);
+        if (!ParentSocketName.IsEmpty())
+        {
+            Obj->SetStringField(TEXT("parent_component"), ParentSocketName);
+        }
+        return Obj;
+    };
+
+    // SCS-added components.
+    if (Blueprint->SimpleConstructionScript)
+    {
+        for (USCS_Node* SCSNode : Blueprint->SimpleConstructionScript->GetAllNodes())
+        {
+            if (!SCSNode) continue;
+            const FName VariableName = SCSNode->GetVariableName();
+            SCSComponentNames.Add(VariableName);
+
+            FString ParentComponentName;
+            if (USCS_Node* ParentNode = Blueprint->SimpleConstructionScript->FindParentNode(SCSNode))
+            {
+                ParentComponentName = ParentNode->GetVariableName().ToString();
+            }
+            else if (!SCSNode->ParentComponentOrVariableName.IsNone())
+            {
+                ParentComponentName = SCSNode->ParentComponentOrVariableName.ToString();
+            }
+
+            ComponentsArr.Add(MakeShared<FJsonValueObject>(
+                MakeComponentJson(SCSNode->ComponentTemplate,
+                                  VariableName,
+                                  /*bIsNative=*/false,
+                                  ParentComponentName)));
+        }
+    }
+
+    // Native components: take them from the parent class CDO if it's an AActor.
+    if (Blueprint->ParentClass && Blueprint->ParentClass->IsChildOf(AActor::StaticClass()))
+    {
+        AActor* ParentCDO = Cast<AActor>(Blueprint->ParentClass->GetDefaultObject());
+        if (ParentCDO)
+        {
+            TInlineComponentArray<UActorComponent*> NativeComponents;
+            ParentCDO->GetComponents(NativeComponents);
+            for (UActorComponent* Component : NativeComponents)
+            {
+                if (!Component) continue;
+                const FName ComponentName = Component->GetFName();
+                // Skip if SCS re-declared a component with the same name (very rare).
+                if (SCSComponentNames.Contains(ComponentName)) continue;
+                ComponentsArr.Add(MakeShared<FJsonValueObject>(
+                    MakeComponentJson(Component,
+                                      ComponentName,
+                                      /*bIsNative=*/true,
+                                      FString())));
+            }
+        }
+    }
+
+    Result->SetArrayField(TEXT("components"), ComponentsArr);
+
+    return Result;
+}
+
 TArray<FMCPCommandMeta> FUnrealMCPBlueprintCommands::GetCommandMetadata()
 {
 	return {
@@ -1209,6 +1345,9 @@ TArray<FMCPCommandMeta> FUnrealMCPBlueprintCommands::GetCommandMetadata()
 			{TEXT("use_controller_rotation_pitch"), TEXT("bool"), false, TEXT("Use controller pitch")},
 			{TEXT("use_controller_rotation_roll"), TEXT("bool"), false, TEXT("Use controller roll")},
 			{TEXT("can_be_damaged"), TEXT("bool"), false, TEXT("Can receive damage")}
+		}},
+		{TEXT("get_blueprint_info"), TEXT("blueprint"), TEXT("Read a Blueprint's parent class, implemented interfaces, and component tree (SCS + native)"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")}
 		}}
 	};
 } 

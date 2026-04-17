@@ -337,10 +337,11 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("add_component_to_blueprint") || 
                      CommandType == TEXT("set_component_property") || 
                      CommandType == TEXT("set_physics_properties") || 
-                     CommandType == TEXT("compile_blueprint") || 
-                     CommandType == TEXT("set_blueprint_property") || 
+                     CommandType == TEXT("compile_blueprint") ||
+                     CommandType == TEXT("set_blueprint_property") ||
                      CommandType == TEXT("set_static_mesh_properties") ||
-                     CommandType == TEXT("set_pawn_properties"))
+                     CommandType == TEXT("set_pawn_properties") ||
+                     CommandType == TEXT("get_blueprint_info"))
             {
                 ResultJson = BlueprintCommands->HandleCommand(CommandType, Params);
             }

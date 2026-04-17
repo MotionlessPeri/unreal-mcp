@@ -44,4 +44,8 @@ private:
     // UObject function call commands
     TSharedPtr<FJsonObject> HandleCallSubsystemFunction(const TSharedPtr<FJsonObject>& Params);
     TSharedPtr<FJsonObject> HandleAddToActorArrayProperty(const TSharedPtr<FJsonObject>& Params);
-}; 
+
+    // Asset introspection commands
+    TSharedPtr<FJsonObject> HandleGetDataAsset(const TSharedPtr<FJsonObject>& Params);
+    TSharedPtr<FJsonObject> HandleFindAssets(const TSharedPtr<FJsonObject>& Params);
+};

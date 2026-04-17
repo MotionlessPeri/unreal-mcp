@@ -25,7 +25,12 @@
 #include "HAL/PlatformMisc.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/DataAsset.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "JsonObjectConverter.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "AssetRegistry/ARFilter.h"
 
 namespace
 {
@@ -156,6 +161,15 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleCommand(const FString& C
     else if (CommandType == TEXT("add_to_actor_array_property"))
     {
         return HandleAddToActorArrayProperty(Params);
+    }
+    // Asset introspection
+    else if (CommandType == TEXT("get_data_asset"))
+    {
+        return HandleGetDataAsset(Params);
+    }
+    else if (CommandType == TEXT("find_assets"))
+    {
+        return HandleFindAssets(Params);
     }
 
     return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown editor command: %s"), *CommandType));
@@ -1115,6 +1129,172 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleAddToActorArrayProperty(
     return ResultObj;
 }
 
+TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleGetDataAsset(const TSharedPtr<FJsonObject>& Params)
+{
+    FString Path;
+    if (!Params->TryGetStringField(TEXT("path"), Path))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'path' parameter"));
+    }
+
+    // StaticLoadObject accepts both content-browser paths ("/Game/X/Y") and full object
+    // paths ("/Game/X/Y.Y"); pick whichever the caller provided.
+    UObject* Object = StaticLoadObject(UObject::StaticClass(), nullptr, *Path);
+    if (!Object)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Could not load asset at path: %s"), *Path));
+    }
+
+    bool bAllowAnyObject = false;
+    Params->TryGetBoolField(TEXT("allow_any_object"), bAllowAnyObject);
+    if (!bAllowAnyObject && !Object->IsA(UDataAsset::StaticClass()))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(
+                TEXT("Asset is not a DataAsset (class: %s). Pass allow_any_object=true to read arbitrary UObject assets."),
+                *Object->GetClass()->GetName()));
+    }
+
+    FString PropertyPath;
+    Params->TryGetStringField(TEXT("property_path"), PropertyPath);
+
+    const int64 CheckFlags = 0;
+    const int64 SkipFlags = CPF_Transient;
+
+    TSharedPtr<FJsonObject> PropsObj = MakeShared<FJsonObject>();
+    if (PropertyPath.IsEmpty())
+    {
+        FJsonObjectConverter::UStructToJsonObject(
+            Object->GetClass(), Object, PropsObj.ToSharedRef(), CheckFlags, SkipFlags);
+    }
+    else
+    {
+        FProperty* Property = Object->GetClass()->FindPropertyByName(FName(*PropertyPath));
+        if (!Property)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Property not found on asset class '%s': %s"),
+                    *Object->GetClass()->GetName(), *PropertyPath));
+        }
+        TSharedPtr<FJsonValue> Value = FJsonObjectConverter::UPropertyToJsonValue(
+            Property, Property->ContainerPtrToValuePtr<void>(Object), CheckFlags, SkipFlags);
+        if (Value.IsValid())
+        {
+            PropsObj->SetField(PropertyPath, Value);
+        }
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("path"), Object->GetPathName());
+    Result->SetStringField(TEXT("asset_name"), Object->GetName());
+    Result->SetStringField(TEXT("asset_class"), Object->GetClass()->GetPathName());
+    Result->SetStringField(TEXT("asset_class_short"), Object->GetClass()->GetName());
+    if (!PropertyPath.IsEmpty())
+    {
+        Result->SetStringField(TEXT("property_path"), PropertyPath);
+    }
+    Result->SetObjectField(TEXT("properties"), PropsObj);
+    return Result;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleFindAssets(const TSharedPtr<FJsonObject>& Params)
+{
+    FString Path = TEXT("/Game");
+    Params->TryGetStringField(TEXT("path"), Path);
+
+    FString ClassName;
+    Params->TryGetStringField(TEXT("class_name"), ClassName);
+
+    bool bRecursive = true;
+    Params->TryGetBoolField(TEXT("recursive"), bRecursive);
+
+    FString NamePattern;
+    Params->TryGetStringField(TEXT("name_pattern"), NamePattern);
+
+    FAssetRegistryModule& AssetRegistryModule =
+        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+    IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+    FARFilter Filter;
+    Filter.PackagePaths.Add(FName(*Path));
+    Filter.bRecursivePaths = bRecursive;
+
+    FString ClassResolution = TEXT("none");
+    if (!ClassName.IsEmpty())
+    {
+        // Accept either short name ("Blueprint") or full path ("/Script/Engine.Blueprint").
+        UClass* TargetClass = nullptr;
+        if (ClassName.Contains(TEXT(".")))
+        {
+            TargetClass = FindObject<UClass>(nullptr, *ClassName);
+            ClassResolution = TEXT("full_path");
+        }
+        else
+        {
+            TargetClass = UClass::TryFindTypeSlow<UClass>(ClassName);
+            ClassResolution = TEXT("short_name");
+        }
+
+        if (TargetClass)
+        {
+            Filter.ClassPaths.Add(TargetClass->GetClassPathName());
+            Filter.bRecursiveClasses = true;
+        }
+        else
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Class not found: %s"), *ClassName));
+        }
+    }
+
+    TArray<FAssetData> AssetDataList;
+    AssetRegistry.GetAssets(Filter, AssetDataList);
+
+    TArray<TSharedPtr<FJsonValue>> AssetsArr;
+    for (const FAssetData& Asset : AssetDataList)
+    {
+        if (!NamePattern.IsEmpty()
+            && !Asset.AssetName.ToString().MatchesWildcard(NamePattern, ESearchCase::IgnoreCase))
+        {
+            continue;
+        }
+
+        TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
+        AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
+        AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
+        AssetObj->SetStringField(TEXT("package_path"), Asset.PackagePath.ToString());
+        AssetObj->SetStringField(TEXT("class"), Asset.AssetClassPath.ToString());
+
+        // Pull BP parent class from asset tags without loading the asset. Keys differ
+        // by UE version; try both common names.
+        FString ParentClassTag;
+        if (Asset.GetTagValue(FName(TEXT("ParentClass")), ParentClassTag)
+            || Asset.GetTagValue(FName(TEXT("NativeParentClass")), ParentClassTag))
+        {
+            AssetObj->SetStringField(TEXT("parent_class"), ParentClassTag);
+        }
+
+        AssetsArr.Add(MakeShared<FJsonValueObject>(AssetObj));
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetArrayField(TEXT("assets"), AssetsArr);
+    Result->SetNumberField(TEXT("total_count"), AssetsArr.Num());
+    Result->SetStringField(TEXT("search_path"), Path);
+    Result->SetBoolField(TEXT("recursive"), bRecursive);
+    if (!ClassName.IsEmpty())
+    {
+        Result->SetStringField(TEXT("class_filter"), ClassName);
+        Result->SetStringField(TEXT("class_resolution"), ClassResolution);
+    }
+    if (!NamePattern.IsEmpty())
+    {
+        Result->SetStringField(TEXT("name_pattern"), NamePattern);
+    }
+    return Result;
+}
+
 TArray<FMCPCommandMeta> FUnrealMCPEditorCommands::GetCommandMetadata()
 {
 	return {
@@ -1186,6 +1366,17 @@ TArray<FMCPCommandMeta> FUnrealMCPEditorCommands::GetCommandMetadata()
 			{TEXT("property_name"), TEXT("string"), true, TEXT("Array property name")},
 			{TEXT("element_name"), TEXT("string"), false, TEXT("Single actor name to add")},
 			{TEXT("element_names"), TEXT("array"), false, TEXT("Array of actor names to add")}
+		}},
+		{TEXT("get_data_asset"), TEXT("editor"), TEXT("Read a DataAsset (or any UObject asset with allow_any_object=true) as JSON properties"), {
+			{TEXT("path"), TEXT("string"), true, TEXT("Content-browser or object path (/Game/.../Asset or /Game/.../Asset.Asset)")},
+			{TEXT("property_path"), TEXT("string"), false, TEXT("Optional top-level property name to narrow the dump")},
+			{TEXT("allow_any_object"), TEXT("bool"), false, TEXT("Read non-DataAsset UObject assets too (default: false)")}
+		}},
+		{TEXT("find_assets"), TEXT("editor"), TEXT("List assets under a path, optionally filtered by class or name pattern (uses AssetRegistry, no asset loading)"), {
+			{TEXT("path"), TEXT("string"), false, TEXT("Package path (default: /Game)")},
+			{TEXT("class_name"), TEXT("string"), false, TEXT("Filter by asset class (short name or full path; recursive by subclass)")},
+			{TEXT("recursive"), TEXT("bool"), false, TEXT("Recurse into subfolders (default: true)")},
+			{TEXT("name_pattern"), TEXT("string"), false, TEXT("Wildcard glob on asset name (case-insensitive)")}
 		}}
 	};
 }

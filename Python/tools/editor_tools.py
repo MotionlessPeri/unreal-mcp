@@ -615,4 +615,104 @@ def register_editor_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+    @mcp.tool()
+    def get_data_asset(
+        ctx: Context,
+        path: str,
+        property_path: str = "",
+        allow_any_object: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Read a DataAsset (or any UObject asset) as JSON properties.
+
+        Loads the asset via StaticLoadObject and serializes its property container
+        via FJsonObjectConverter. Transient properties are skipped.
+
+        Args:
+            path: Content-browser path (/Game/.../MyAsset) or full object path
+                  (/Game/.../MyAsset.MyAsset).
+            property_path: Optional top-level property name. When set, only that
+                  property's value is returned, keyed under `properties[property_path]`.
+                  Nested paths (e.g. "Comp.Field") are not yet supported.
+            allow_any_object: When false (default) the command rejects assets that
+                  aren't UDataAsset. Set true to read arbitrary UObject assets.
+
+        Returns:
+            Dict with:
+              - path, asset_name
+              - asset_class (full path), asset_class_short
+              - property_path (echoed when provided)
+              - properties (object) — all properties by default, or just
+                  {property_path: value} when narrowed.
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            params: Dict[str, Any] = {"path": path}
+            if property_path:
+                params["property_path"] = property_path
+            if allow_any_object:
+                params["allow_any_object"] = True
+            response = unreal.send_command("get_data_asset", params)
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            error_msg = f"Error reading data asset: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
+    @mcp.tool()
+    def find_assets(
+        ctx: Context,
+        path: str = "/Game",
+        class_name: str = "",
+        recursive: bool = True,
+        name_pattern: str = "",
+    ) -> Dict[str, Any]:
+        """
+        List assets via the AssetRegistry without loading them.
+
+        Args:
+            path: Package path to search (default /Game).
+            class_name: Filter by asset class. Short name ("Blueprint", "DataAsset")
+                  or full path ("/Script/Engine.Blueprint"). Recursive over subclasses.
+                  NOTE: Blueprint assets all report class="Blueprint" regardless of
+                  their parent class; to narrow by Blueprint parent, filter the
+                  returned `parent_class` field client-side.
+            recursive: Recurse into subfolders (default true).
+            name_pattern: Wildcard glob on asset name, case-insensitive.
+
+        Returns:
+            Dict with:
+              - assets (list[dict]): each entry has name, path, package_path, class,
+                  and parent_class (when available from asset tags — filled in for BPs).
+              - total_count
+              - search_path, recursive, class_filter, class_resolution, name_pattern
+                  (echoed back for debugging).
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            params: Dict[str, Any] = {"path": path, "recursive": recursive}
+            if class_name:
+                params["class_name"] = class_name
+            if name_pattern:
+                params["name_pattern"] = name_pattern
+            response = unreal.send_command("find_assets", params)
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            logger.info(f"find_assets total={response.get('result', {}).get('total_count', '?')}")
+            return response
+        except Exception as e:
+            error_msg = f"Error listing assets: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("Editor tools registered successfully")

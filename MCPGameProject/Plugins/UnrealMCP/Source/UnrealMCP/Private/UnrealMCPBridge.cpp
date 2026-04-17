@@ -328,7 +328,9 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("request_editor_exit") ||
                      CommandType == TEXT("save_and_exit_editor") ||
                      CommandType == TEXT("call_subsystem_function") ||
-                     CommandType == TEXT("add_to_actor_array_property"))
+                     CommandType == TEXT("add_to_actor_array_property") ||
+                     CommandType == TEXT("get_data_asset") ||
+                     CommandType == TEXT("find_assets"))
             {
                 ResultJson = EditorCommands->HandleCommand(CommandType, Params);
             }
@@ -341,7 +343,8 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                      CommandType == TEXT("set_blueprint_property") ||
                      CommandType == TEXT("set_static_mesh_properties") ||
                      CommandType == TEXT("set_pawn_properties") ||
-                     CommandType == TEXT("get_blueprint_info"))
+                     CommandType == TEXT("get_blueprint_info") ||
+                     CommandType == TEXT("get_blueprint_defaults"))
             {
                 ResultJson = BlueprintCommands->HandleCommand(CommandType, Params);
             }

@@ -4,6 +4,18 @@ Tracking list of features the agent layer needed but the current MCP plugin does
 Each entry is written as an actionable spec: what's missing, why it mattered in real work,
 where to implement in the C++ plugin, and what the JSON shape should look like after the fix.
 
+**Implementation status (2026-04-17):**
+- Tier 1 — **implemented** (`T1-1` / `T1-2` / `T1-3` / `T1-4`) in commit `bfefc66`.
+- Tier 2 — **implemented** (`T2-5` / `T2-6` / `T2-7`); see `Docs/Progress.md` for the entry.
+  - Known limitation on T2-5 and T2-6: `property_path` is top-level only.
+    Subobject-nested reads (e.g. reading `GrantAbilitiesOnStart` on the
+    `TBIA_InteractionComponent` subobject of a Character CDO) require a nested
+    path syntax or a separate "dump subobject defaults" command. Deferred to
+    a future iteration — callers can see the subobject reference in the
+    top-level dump and then read that object via `get_data_asset` with
+    `allow_any_object=true` as a workaround.
+- Tier 3 — deferred.
+
 ## Source of Findings
 
 Compiled from a Demo walkthrough session (2026-04-17) against the TwistedBytes Interaction

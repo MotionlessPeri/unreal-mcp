@@ -245,6 +245,37 @@ Add actor references to an array property on an actor.
 
 ---
 
+### get_data_asset
+
+Read a DataAsset (or any UObject asset with `allow_any_object=true`) as JSON properties.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Content-browser path (`/Game/.../Asset`) or full object path (`/Game/.../Asset.Asset`) |
+| `property_path` | string | no | Top-level property name to narrow the dump |
+| `allow_any_object` | bool | no | Read non-DataAsset UObject assets (default `false`) |
+
+**Returns:** `path`, `asset_name`, `asset_class` (full path), `asset_class_short`, `properties` (object). Transient properties are skipped.
+
+---
+
+### find_assets
+
+List assets via the `AssetRegistry` without loading them.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | no | Package path to search (default: `/Game`) |
+| `class_name` | string | no | Filter by asset class — short name (`"Blueprint"`) or full path (`"/Script/Engine.Blueprint"`). Recursive over subclasses. |
+| `recursive` | bool | no | Recurse into subfolders (default: `true`) |
+| `name_pattern` | string | no | Wildcard glob on asset name, case-insensitive |
+
+**Returns:** `assets` (array of `{name, path, package_path, class, parent_class?}`), `total_count`, plus echoed filter fields for debugging.
+
+> Blueprint assets all report `class="Blueprint"` regardless of their parent; filter by the returned `parent_class` tag client-side to narrow by Blueprint parent class.
+
+---
+
 ## Blueprint
 
 ### create_blueprint
@@ -383,6 +414,19 @@ Complementary to `get_blueprint_graph_info` — this answers "what IS this Bluep
 - `blueprint_type` (e.g. `BPTYPE_Normal`)
 - `implemented_interfaces` — array of `{name, path, graph_count}`
 - `components` — array of `{name, component_class, component_class_short, is_native, parent_component?}`; `is_native=true` means inherited from the parent C++ class's CDO, `false` means added via SCS at the BP level.
+
+---
+
+### get_blueprint_defaults
+
+Read a Blueprint CDO's property values (Details-panel-level data).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `blueprint_name` | string | yes | Target Blueprint |
+| `property_path` | string | no | Top-level property name to narrow the dump (e.g. `GrantAbilitiesOnStart`). Nested paths not yet supported. |
+
+**Returns:** `blueprint_name`, `path`, `parent_class`, `generated_class`, `properties` (object — all properties by default, or just `{property_path: value}` when narrowed). Transient properties are skipped. UObject/asset references serialize as object paths; arrays and structs recurse.
 
 ---
 

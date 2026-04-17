@@ -2,6 +2,7 @@
 #include "Commands/UnrealMCPCommonUtils.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "JsonObjectConverter.h"
 #include "Factories/BlueprintFactory.h"
 #include "EdGraphSchema_K2.h"
 #include "K2Node_Event.h"
@@ -66,6 +67,10 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleCommand(const FString
     else if (CommandType == TEXT("get_blueprint_info"))
     {
         return HandleGetBlueprintInfo(Params);
+    }
+    else if (CommandType == TEXT("get_blueprint_defaults"))
+    {
+        return HandleGetBlueprintDefaults(Params);
     }
 
     return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Unknown blueprint command: %s"), *CommandType));
@@ -1295,6 +1300,82 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleGetBlueprintInfo(cons
     return Result;
 }
 
+TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleGetBlueprintDefaults(const TSharedPtr<FJsonObject>& Params)
+{
+    FString BlueprintName;
+    if (!Params->TryGetStringField(TEXT("blueprint_name"), BlueprintName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'blueprint_name' parameter"));
+    }
+
+    UBlueprint* Blueprint = FUnrealMCPCommonUtils::FindBlueprint(BlueprintName);
+    if (!Blueprint)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
+    }
+
+    UClass* GeneratedClass = Blueprint->GeneratedClass;
+    if (!GeneratedClass)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Blueprint has no GeneratedClass yet (may need compile): %s"), *BlueprintName));
+    }
+    UObject* CDO = GeneratedClass->GetDefaultObject();
+    if (!CDO)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Blueprint CDO unavailable: %s"), *BlueprintName));
+    }
+
+    FString PropertyPath;
+    Params->TryGetStringField(TEXT("property_path"), PropertyPath);
+
+    // Skip transient (runtime-only) fields; editor-facing config lives in serialized UPROPERTYs.
+    const int64 CheckFlags = 0;
+    const int64 SkipFlags = CPF_Transient;
+
+    TSharedPtr<FJsonObject> PropsObj = MakeShared<FJsonObject>();
+    if (PropertyPath.IsEmpty())
+    {
+        // Dump the full CDO property container.
+        FJsonObjectConverter::UStructToJsonObject(
+            GeneratedClass, CDO, PropsObj.ToSharedRef(), CheckFlags, SkipFlags);
+    }
+    else
+    {
+        // Single top-level property by name. Nested paths (e.g. "Comp.Field") are
+        // deferred — callers can follow the returned object path with another read.
+        FProperty* Property = GeneratedClass->FindPropertyByName(FName(*PropertyPath));
+        if (!Property)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(
+                FString::Printf(TEXT("Property not found on '%s': %s"), *BlueprintName, *PropertyPath));
+        }
+        TSharedPtr<FJsonValue> Value = FJsonObjectConverter::UPropertyToJsonValue(
+            Property, Property->ContainerPtrToValuePtr<void>(CDO), CheckFlags, SkipFlags);
+        if (Value.IsValid())
+        {
+            PropsObj->SetField(PropertyPath, Value);
+        }
+    }
+
+    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+    Result->SetStringField(TEXT("blueprint_name"), BlueprintName);
+    Result->SetStringField(TEXT("path"), Blueprint->GetPathName());
+    if (Blueprint->ParentClass)
+    {
+        Result->SetStringField(TEXT("parent_class"), Blueprint->ParentClass->GetPathName());
+    }
+    Result->SetStringField(TEXT("generated_class"), GeneratedClass->GetPathName());
+    if (!PropertyPath.IsEmpty())
+    {
+        Result->SetStringField(TEXT("property_path"), PropertyPath);
+    }
+    Result->SetObjectField(TEXT("properties"), PropsObj);
+    return Result;
+}
+
 TArray<FMCPCommandMeta> FUnrealMCPBlueprintCommands::GetCommandMetadata()
 {
 	return {
@@ -1348,6 +1429,10 @@ TArray<FMCPCommandMeta> FUnrealMCPBlueprintCommands::GetCommandMetadata()
 		}},
 		{TEXT("get_blueprint_info"), TEXT("blueprint"), TEXT("Read a Blueprint's parent class, implemented interfaces, and component tree (SCS + native)"), {
 			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")}
+		}},
+		{TEXT("get_blueprint_defaults"), TEXT("blueprint"), TEXT("Read a Blueprint CDO's property values (Details-panel level data: arrays, enums, struct fields, object references)"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("property_path"), TEXT("string"), false, TEXT("Optional top-level property name to narrow the dump")}
 		}}
 	};
 } 

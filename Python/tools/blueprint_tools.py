@@ -580,4 +580,55 @@ def register_blueprint_tools(mcp: FastMCP):
             logger.error(error_msg)
             return {"success": False, "message": error_msg}
 
+    @mcp.tool()
+    def get_blueprint_defaults(
+        ctx: Context,
+        blueprint_name: str,
+        property_path: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Read a Blueprint CDO's property values (Details-panel-level data).
+
+        Returns the default values for every UPROPERTY on the generated class's CDO.
+        This covers arrays (e.g. `GrantAbilitiesOnStart`), enums, struct fields,
+        and UObject/asset references (serialized as object paths). Transient
+        (runtime-only) fields are skipped.
+
+        Args:
+            blueprint_name: Asset name of the Blueprint.
+            property_path: Optional top-level property name to narrow the dump
+                  (e.g. "GrantAbilitiesOnStart"). Nested paths
+                  (e.g. "CharacterMovement.MaxWalkSpeed") are not yet supported —
+                  follow the returned object path with a separate command.
+
+        Returns:
+            Dict with:
+              - blueprint_name, path
+              - parent_class (full path), generated_class (full path)
+              - property_path (echoed when provided)
+              - properties (object) — all properties by default, or just
+                  {property_path: value} when narrowed.
+
+        Example:
+            # Find which abilities a player BP grants at start
+            get_blueprint_defaults("BP_PlayerCharacter", "GrantAbilitiesOnStart")
+        """
+        from unreal_mcp_server import get_unreal_connection
+
+        try:
+            unreal = get_unreal_connection()
+            if not unreal:
+                return {"success": False, "message": "Failed to connect to Unreal Engine"}
+            params: Dict[str, Any] = {"blueprint_name": blueprint_name}
+            if property_path:
+                params["property_path"] = property_path
+            response = unreal.send_command("get_blueprint_defaults", params)
+            if not response:
+                return {"success": False, "message": "No response from Unreal Engine"}
+            return response
+        except Exception as e:
+            error_msg = f"Error getting blueprint defaults: {e}"
+            logger.error(error_msg)
+            return {"success": False, "message": error_msg}
+
     logger.info("Blueprint tools registered successfully")

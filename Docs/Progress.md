@@ -16,12 +16,21 @@
 12. 2026-03-09 (AnimMontage read support in base UnrealMCP)
 13. 2026-04-17 (agent usage guide + command reference docs + help command)
 14. 2026-04-17 (capability gaps backlog + Tier 1 introspection: pin defaults, interface graphs, blueprint info)
+15. 2026-04-17 (Tier 2 introspection: blueprint defaults CDO dump, data asset reader, asset registry listing)
 
 ## Current Milestone
 
 1. Stabilize blueprint graph automation for consumer projects (`StupidChess` as first consumer).
 
 ## Completed
+
+1. Tier 2 introspection: defaults, data assets, asset registry (2026-04-17):
+   - **T2-5 `get_blueprint_defaults`**: reads a Blueprint's CDO property container via `FJsonObjectConverter::UStructToJsonObject`. Covers arrays (e.g. `GrantAbilitiesOnStart`), enums, struct fields, and UObject references (serialized as object paths). Accepts optional `property_path` to narrow to a single top-level property; transient properties are skipped.
+   - **T2-6 `get_data_asset`**: loads any DataAsset (or arbitrary UObject asset with `allow_any_object=true`) via `StaticLoadObject` and serializes its properties. Covers typical cases like `UTBIA_EnhancedInputMapping` where `AbilityMapping[]` carries the InputAction ↔ GameplayTag ↔ Ability binding that drives the player's input pipeline.
+   - **T2-7 `find_assets`**: queries the `AssetRegistry` by package path + optional class name + optional wildcard name pattern, without loading assets. Returns each asset's name/path/class and, when available in asset tags, its `ParentClass` (filled in for Blueprint assets so callers can narrow by BP parent client-side).
+   - C++ handlers: `FUnrealMCPBlueprintCommands::HandleGetBlueprintDefaults`, `FUnrealMCPEditorCommands::HandleGetDataAsset` / `HandleFindAssets`; dispatcher entries added in `UnrealMCPBridge::ExecuteCommand`.
+   - Python tools: `blueprint_tools.py` adds `get_blueprint_defaults`; `editor_tools.py` adds `get_data_asset` + `find_assets`.
+   - Docs: `Docs/commands.md` gets entries for all three commands; `Docs/CapabilityGaps.md` still lists Tier 2 in the backlog — mark inline when committing.
 
 1. Capability Gaps backlog + Tier 1 introspection (2026-04-17):
    - added `Docs/CapabilityGaps.md`: tiered backlog (T1/T2/T3) of MCP introspection gaps discovered during live agent usage against TBIA_Demo. Each entry captures the current behavior, why it matters in real work, where to implement in the plugin, and an acceptance test.

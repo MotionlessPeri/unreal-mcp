@@ -14,12 +14,27 @@
 10. 2026-03-09 (split DialogueSystem support into optional extension plugin)
 11. 2026-03-09 (Logic Driver full state machine graph read extension)
 12. 2026-03-09 (AnimMontage read support in base UnrealMCP)
+13. 2026-04-17 (agent usage guide + command reference docs + help command)
 
 ## Current Milestone
 
 1. Stabilize blueprint graph automation for consumer projects (`StupidChess` as first consumer).
 
 ## Completed
+
+1. Agent documentation and help command (2026-04-17):
+   - added `Docs/commands.md`: complete command reference for all ~76 built-in commands with parameters, types, and descriptions.
+   - added `Docs/commands-dialogue.md`: Dialogue extension command reference (10 commands).
+   - added `Docs/commands-logicdriver.md`: LogicDriver extension command reference (1 command).
+   - added `Docs/agent-usage-guide.md`: guide for AI agents covering TCP connection, usage rules, common pitfalls, and rebuild workflow.
+   - added `help` command (C++ + Python): runtime command discovery.
+     - list mode: `{"type": "help"}` returns all commands grouped by category.
+     - detail mode: `{"type": "help", "params": {"command": "spawn_actor"}}` returns description and parameter metadata.
+   - per-class metadata registration: each handler class provides `GetCommandMetadata()` returning `TArray<FMCPCommandMeta>`.
+   - extension handlers can opt-in via `IUnrealMCPCommandHandler::GetCommandMetadata()` virtual method (backward-compatible default empty).
+   - `FUnrealMCPCommandRegistry::GetAllExtensionMetadata()` aggregates metadata from all registered extension handlers.
+   - Python tool `help_tools.py` registered in `unreal_mcp_server.py`.
+   - updated `Docs/README.md` index with new documentation entries.
 
 1. UnrealMCP consumer split: optional DialogueSystem extension plugin (2026-03-09):
    - removed direct `DialogueSystem` / `DialogueSystemEditor` dependencies from base `UnrealMCP`.

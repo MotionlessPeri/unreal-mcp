@@ -4,7 +4,10 @@ Welcome to the documentation for the Unreal Engine Model Context Protocol (MCP) 
 
 ## Contents
 
-1. [Tools](Tools/README.md) - Tool reference and command surface.
-2. [Progress](Progress.md) - Current implementation status and near-term roadmap.
-3. [Fork Workflow](ForkWorkflow.md) - How to maintain this fork and sync into consumer projects.
-
+1. [Agent Usage Guide](agent-usage-guide.md) - How AI agents should connect to and use UnrealMCP.
+2. [Command Reference](commands.md) - Complete reference for all built-in commands with parameters.
+   - [Dialogue Extension Commands](commands-dialogue.md) - Commands from the optional Dialogue plugin.
+   - [LogicDriver Extension Commands](commands-logicdriver.md) - Commands from the optional LogicDriver plugin.
+3. [Tools](Tools/README.md) - Tool reference and command surface (legacy).
+4. [Progress](Progress.md) - Current implementation status and near-term roadmap.
+5. [Fork Workflow](ForkWorkflow.md) - How to maintain this fork and sync into consumer projects.

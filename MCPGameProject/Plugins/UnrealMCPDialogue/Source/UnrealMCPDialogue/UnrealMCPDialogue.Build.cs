@@ -16,7 +16,9 @@ public class UnrealMCPDialogue : ModuleRules
 				"Json",
 				"UnrealMCP",
 				"DialogueSystem",
-				"DialogueSystemEditor"
+				"DialogueSystemEditor",
+				"OFStateGraphCore",
+				"OFStateGraphCoreEditor"
 			}
 		);
 

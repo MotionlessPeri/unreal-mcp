@@ -6,9 +6,11 @@
 #include "DialogueAsset.h"
 #include "DialogueAssetFactory.h"
 #include "DialogueNode.h"
+#include "StateGraphNode.h"
 #include "DialogueEdgeTypes.h"
 #include "DialogueGraphNode.h"
 #include "DialogueGraphSchema.h"
+#include "DialogueChoiceHelpers.h"
 #include "DialogueSpeakerAsset.h"
 #include "DialogueConditionEvaluator.h"
 #include "EdGraph/EdGraph.h"
@@ -68,7 +70,7 @@ UDialogueAsset* FUnrealMCPDialogueCommands::LoadDialogueAsset(
 	return Asset;
 }
 
-UDialogueNode* FUnrealMCPDialogueCommands::FindNodeByGuid(
+UStateGraphNode* FUnrealMCPDialogueCommands::FindNodeByGuid(
 	UDialogueAsset* Asset, const FString& NodeIdStr)
 {
 	FGuid SearchId;
@@ -77,7 +79,7 @@ UDialogueNode* FUnrealMCPDialogueCommands::FindNodeByGuid(
 		return nullptr;
 	}
 
-	for (UDialogueNode* Node : Asset->AllNodes)
+	for (UStateGraphNode* Node : Asset->AllNodes)
 	{
 		if (Node && Node->NodeId == SearchId)
 		{
@@ -85,7 +87,7 @@ UDialogueNode* FUnrealMCPDialogueCommands::FindNodeByGuid(
 		}
 	}
 
-	for (UDialogueNode* Node : Asset->AllNodes)
+	for (UStateGraphNode* Node : Asset->AllNodes)
 	{
 		if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
 		{
@@ -102,7 +104,7 @@ UDialogueNode* FUnrealMCPDialogueCommands::FindNodeByGuid(
 }
 
 UEdGraphPin* FUnrealMCPDialogueCommands::FindOutputPin(
-	UDialogueAsset* Asset, UDialogueNode* Node, const FString& PinName)
+	UDialogueAsset* Asset, UStateGraphNode* Node, const FString& PinName)
 {
 #if WITH_EDITORONLY_DATA
 	if (!Asset->EditorGraph)
@@ -110,10 +112,10 @@ UEdGraphPin* FUnrealMCPDialogueCommands::FindOutputPin(
 		return nullptr;
 	}
 
-	UDialogueNode* GraphOwnerRT = Node;
+	UStateGraphNode* GraphOwnerRT = Node;
 	if (UDialogueChoiceItemNode* Item = Cast<UDialogueChoiceItemNode>(Node))
 	{
-		for (UDialogueNode* N : Asset->AllNodes)
+		for (UStateGraphNode* N : Asset->AllNodes)
 		{
 			if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(N))
 			{
@@ -148,7 +150,7 @@ UEdGraphPin* FUnrealMCPDialogueCommands::FindOutputPin(
 }
 
 UEdGraphPin* FUnrealMCPDialogueCommands::FindInputPin(
-	UDialogueAsset* Asset, UDialogueNode* Node)
+	UDialogueAsset* Asset, UStateGraphNode* Node)
 {
 #if WITH_EDITORONLY_DATA
 	if (!Asset->EditorGraph)
@@ -197,7 +199,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueGraph(
 	}
 
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
-	for (UDialogueNode* Node : Asset->AllNodes)
+	for (UStateGraphNode* Node : Asset->AllNodes)
 	{
 		if (!Node)
 		{
@@ -223,6 +225,14 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueGraph(
 		else if (Cast<UDialogueExitNode>(Node))
 		{
 			NodeType = TEXT("Exit");
+		}
+		else if (Cast<UDialogueConduitNode>(Node))
+		{
+			NodeType = TEXT("Conduit");
+		}
+		else if (Cast<UDialogueRerouteNode>(Node))
+		{
+			NodeType = TEXT("Reroute");
 		}
 		else
 		{
@@ -292,14 +302,14 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueConnections
 
 	TArray<TSharedPtr<FJsonValue>> ConnArr;
 
-	for (UDialogueNode* Node : Asset->AllNodes)
+	for (UStateGraphNode* Node : Asset->AllNodes)
 	{
 		if (!Node)
 		{
 			continue;
 		}
 
-		auto MakeConn = [&](const FString& FromPin, UDialogueNode* Target)
+		auto MakeConn = [&](const FString& FromPin, UStateGraphNode* Target)
 		{
 			if (!Target)
 			{
@@ -453,7 +463,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueNode(
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Asset has no EditorGraph — open it in the editor first"));
 	}
 
-	TSubclassOf<UDialogueNode> NodeClass;
+	TSubclassOf<UStateGraphNode> NodeClass;
 	if (NodeType == TEXT("Speech"))
 	{
 		NodeClass = UDialogueSpeechNode::StaticClass();
@@ -481,7 +491,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueNode(
 	Params->TryGetNumberField(TEXT("pos_x"), PosX);
 	Params->TryGetNumberField(TEXT("pos_y"), PosY);
 
-	UDialogueNode* RuntimeNode = NewObject<UDialogueNode>(Asset, NodeClass, NAME_None, RF_Transactional);
+	UStateGraphNode* RuntimeNode = NewObject<UStateGraphNode>(Asset, NodeClass, NAME_None, RF_Transactional);
 	RuntimeNode->NodeId = FGuid::NewGuid();
 	RuntimeNode->NodePosition = FVector2D(PosX, PosY);
 
@@ -554,7 +564,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetDialogueNodePropert
 		return Error;
 	}
 
-	UDialogueNode* Node = FindNodeByGuid(Asset, NodeIdStr);
+	UStateGraphNode* Node = FindNodeByGuid(Asset, NodeIdStr);
 	if (!Node)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
@@ -686,14 +696,14 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleConnectDialogueNodes(
 		return Error;
 	}
 
-	UDialogueNode* FromNode = FindNodeByGuid(Asset, FromNodeId);
+	UStateGraphNode* FromNode = FindNodeByGuid(Asset, FromNodeId);
 	if (!FromNode)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
 			FString::Printf(TEXT("from_node '%s' not found"), *FromNodeId));
 	}
 
-	UDialogueNode* ToNode = FindNodeByGuid(Asset, ToNodeId);
+	UStateGraphNode* ToNode = FindNodeByGuid(Asset, ToNodeId);
 	if (!ToNode)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
@@ -768,14 +778,14 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDisconnectDialogueNode
 		return Error;
 	}
 
-	UDialogueNode* FromNode = FindNodeByGuid(Asset, FromNodeId);
+	UStateGraphNode* FromNode = FindNodeByGuid(Asset, FromNodeId);
 	if (!FromNode)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
 			FString::Printf(TEXT("from_node '%s' not found"), *FromNodeId));
 	}
 
-	UDialogueNode* ToNode = FindNodeByGuid(Asset, ToNodeId);
+	UStateGraphNode* ToNode = FindNodeByGuid(Asset, ToNodeId);
 	if (!ToNode)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
@@ -841,7 +851,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDeleteDialogueNode(
 		return Error;
 	}
 
-	UDialogueNode* Node = FindNodeByGuid(Asset, NodeIdStr);
+	UStateGraphNode* Node = FindNodeByGuid(Asset, NodeIdStr);
 	if (!Node)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
@@ -887,8 +897,8 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDeleteDialogueNode(
 		Schema->BreakPinLinks(*Pin, true);
 	}
 
-	TSet<UDialogueNode*> ValidNodes;
-	for (UDialogueNode* N : Asset->AllNodes)
+	TSet<UStateGraphNode*> ValidNodes;
+	for (UStateGraphNode* N : Asset->AllNodes)
 	{
 		if (N && N != Node)
 		{
@@ -911,7 +921,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDeleteDialogueNode(
 		return !T.TargetNode || !ValidNodes.Contains(T.TargetNode.Get());
 	};
 
-	for (UDialogueNode* OtherNode : Asset->AllNodes)
+	for (UStateGraphNode* OtherNode : Asset->AllNodes)
 	{
 		if (!OtherNode || OtherNode == Node)
 		{
@@ -988,7 +998,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueChoiceItem(
 		return Error;
 	}
 
-	UDialogueNode* Node = FindNodeByGuid(Asset, NodeIdStr);
+	UStateGraphNode* Node = FindNodeByGuid(Asset, NodeIdStr);
 	if (!Node)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
@@ -1022,7 +1032,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueChoiceItem(
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Graph node not found for Choice"));
 	}
 
-	GraphNode->AddChoiceItem();
+	DialogueChoiceHelpers::AddChoiceItem(GraphNode);
 	UDialogueChoiceItemNode* NewItem = Choice->Items.Last();
 
 	FString ChoiceText;
@@ -1075,7 +1085,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition
 		return Error;
 	}
 
-	UDialogueNode* FromNode = FindNodeByGuid(Asset, FromNodeIdStr);
+	UStateGraphNode* FromNode = FindNodeByGuid(Asset, FromNodeIdStr);
 	if (!FromNode)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(
@@ -1089,7 +1099,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition
 			FString::Printf(TEXT("Node '%s' does not support transitions"), *FromNodeIdStr));
 	}
 
-	UDialogueNode* ToNode = FindNodeByGuid(Asset, ToNodeIdStr);
+	UStateGraphNode* ToNode = FindNodeByGuid(Asset, ToNodeIdStr);
 	if (!ToNode)
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(

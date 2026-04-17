@@ -4,7 +4,7 @@
 #include "Json.h"
 
 class UDialogueAsset;
-class UDialogueNode;
+class UStateGraphNode;
 class UEdGraphPin;
 
 /**
@@ -33,7 +33,7 @@ private:
 	TSharedPtr<FJsonObject> HandleSetTransitionCondition(const TSharedPtr<FJsonObject>& Params);
 
 	UDialogueAsset* LoadDialogueAsset(const FString& AssetPath, TSharedPtr<FJsonObject>& OutError);
-	UDialogueNode* FindNodeByGuid(UDialogueAsset* Asset, const FString& NodeIdStr);
-	UEdGraphPin* FindOutputPin(UDialogueAsset* Asset, UDialogueNode* Node, const FString& PinName);
-	UEdGraphPin* FindInputPin(UDialogueAsset* Asset, UDialogueNode* Node);
+	UStateGraphNode* FindNodeByGuid(UDialogueAsset* Asset, const FString& NodeIdStr);
+	UEdGraphPin* FindOutputPin(UDialogueAsset* Asset, UStateGraphNode* Node, const FString& PinName);
+	UEdGraphPin* FindInputPin(UDialogueAsset* Asset, UStateGraphNode* Node);
 };

@@ -69,4 +69,18 @@ TSharedPtr<FJsonObject> FUnrealMCPProjectCommands::HandleCreateInputMapping(cons
     ResultObj->SetStringField(TEXT("action_name"), ActionName);
     ResultObj->SetStringField(TEXT("key"), Key);
     return ResultObj;
-} 
+}
+
+TArray<FMCPCommandMeta> FUnrealMCPProjectCommands::GetCommandMetadata()
+{
+	return {
+		{TEXT("create_input_mapping"), TEXT("project"), TEXT("Create an input action mapping"), {
+			{TEXT("action_name"), TEXT("string"), true, TEXT("Input action name")},
+			{TEXT("key"), TEXT("string"), true, TEXT("Key to map")},
+			{TEXT("shift"), TEXT("bool"), false, TEXT("Shift modifier")},
+			{TEXT("ctrl"), TEXT("bool"), false, TEXT("Ctrl modifier")},
+			{TEXT("alt"), TEXT("bool"), false, TEXT("Alt modifier")},
+			{TEXT("cmd"), TEXT("bool"), false, TEXT("Cmd modifier")}
+		}}
+	};
+}

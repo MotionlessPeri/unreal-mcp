@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Json.h"
+#include "UnrealMCPCommandMeta.h"
 
 /**
  * Handler class for Project-wide MCP commands
@@ -13,6 +14,8 @@ public:
 
     // Handle project commands
     TSharedPtr<FJsonObject> HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
+
+    static TArray<FMCPCommandMeta> GetCommandMetadata();
 
 private:
     // Specific project command handlers

@@ -216,3 +216,12 @@ TSharedPtr<FJsonObject> FUnrealMCPBehaviorTreeCommands::SerializeService(UBTServ
     Obj->SetStringField(TEXT("name"), Node->GetNodeName());
     return Obj;
 }
+
+TArray<FMCPCommandMeta> FUnrealMCPBehaviorTreeCommands::GetCommandMetadata()
+{
+	return {
+		{TEXT("get_behavior_tree_info"), TEXT("behavior_tree"), TEXT("Read a BehaviorTree asset structure"), {
+			{TEXT("asset_path"), TEXT("string"), true, TEXT("Path to BehaviorTree asset")}
+		}}
+	};
+}

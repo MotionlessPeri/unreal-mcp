@@ -1114,3 +1114,78 @@ TSharedPtr<FJsonObject> FUnrealMCPEditorCommands::HandleAddToActorArrayProperty(
 
     return ResultObj;
 }
+
+TArray<FMCPCommandMeta> FUnrealMCPEditorCommands::GetCommandMetadata()
+{
+	return {
+		{TEXT("get_actors_in_level"), TEXT("editor"), TEXT("List all actors in the current level"), {}},
+		{TEXT("find_actors_by_name"), TEXT("editor"), TEXT("Find actors matching a name pattern"), {
+			{TEXT("pattern"), TEXT("string"), true, TEXT("Pattern to match against actor names")}
+		}},
+		{TEXT("spawn_actor"), TEXT("editor"), TEXT("Spawn an actor in the level"), {
+			{TEXT("type"), TEXT("string"), true, TEXT("Actor class or built-in shortcut (StaticMeshActor, PointLight, etc.) or full class path")},
+			{TEXT("name"), TEXT("string"), true, TEXT("Unique actor instance name")},
+			{TEXT("location"), TEXT("object"), false, TEXT("{x, y, z}")},
+			{TEXT("rotation"), TEXT("object"), false, TEXT("{pitch, yaw, roll}")},
+			{TEXT("scale"), TEXT("object"), false, TEXT("{x, y, z}")}
+		}},
+		{TEXT("delete_actor"), TEXT("editor"), TEXT("Delete an actor from the level"), {
+			{TEXT("name"), TEXT("string"), true, TEXT("Actor name")}
+		}},
+		{TEXT("set_actor_transform"), TEXT("editor"), TEXT("Set an actor's transform"), {
+			{TEXT("name"), TEXT("string"), true, TEXT("Actor name")},
+			{TEXT("location"), TEXT("object"), false, TEXT("{x, y, z}")},
+			{TEXT("rotation"), TEXT("object"), false, TEXT("{pitch, yaw, roll}")},
+			{TEXT("scale"), TEXT("object"), false, TEXT("{x, y, z}")}
+		}},
+		{TEXT("get_actor_properties"), TEXT("editor"), TEXT("Get detailed properties of an actor"), {
+			{TEXT("name"), TEXT("string"), true, TEXT("Actor name")}
+		}},
+		{TEXT("set_actor_property"), TEXT("editor"), TEXT("Set a single property on an actor"), {
+			{TEXT("name"), TEXT("string"), true, TEXT("Actor name")},
+			{TEXT("property_name"), TEXT("string"), true, TEXT("Property name")},
+			{TEXT("property_value"), TEXT("any"), true, TEXT("Value to set")}
+		}},
+		{TEXT("spawn_blueprint_actor"), TEXT("editor"), TEXT("Spawn an instance of a Blueprint class"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Blueprint name or path")},
+			{TEXT("actor_name"), TEXT("string"), true, TEXT("Instance label name")},
+			{TEXT("location"), TEXT("object"), false, TEXT("{x, y, z}")},
+			{TEXT("rotation"), TEXT("object"), false, TEXT("{pitch, yaw, roll}")},
+			{TEXT("scale"), TEXT("object"), false, TEXT("{x, y, z}")}
+		}},
+		{TEXT("focus_viewport"), TEXT("editor"), TEXT("Move the editor viewport to a target"), {
+			{TEXT("target"), TEXT("string"), false, TEXT("Actor name to focus on")},
+			{TEXT("location"), TEXT("object"), false, TEXT("{x, y, z} to focus on")},
+			{TEXT("distance"), TEXT("number"), false, TEXT("View distance (default: 1000)")},
+			{TEXT("orientation"), TEXT("object"), false, TEXT("{pitch, yaw, roll}")}
+		}},
+		{TEXT("take_screenshot"), TEXT("editor"), TEXT("Capture a viewport screenshot"), {
+			{TEXT("filepath"), TEXT("string"), true, TEXT("Output file path")}
+		}},
+		{TEXT("save_dirty_assets"), TEXT("editor"), TEXT("Save all dirty assets"), {
+			{TEXT("save_maps"), TEXT("bool"), false, TEXT("Save map packages (default: true)")},
+			{TEXT("save_content"), TEXT("bool"), false, TEXT("Save content packages (default: true)")}
+		}},
+		{TEXT("request_editor_exit"), TEXT("editor"), TEXT("Schedule an asynchronous editor exit"), {
+			{TEXT("force"), TEXT("bool"), false, TEXT("Force exit without prompt (default: false)")},
+			{TEXT("delay_seconds"), TEXT("number"), false, TEXT("Delay before exit (default: 0.25)")}
+		}},
+		{TEXT("save_and_exit_editor"), TEXT("editor"), TEXT("Save dirty assets then schedule editor exit"), {
+			{TEXT("save_maps"), TEXT("bool"), false, TEXT("Save map packages (default: true)")},
+			{TEXT("save_content"), TEXT("bool"), false, TEXT("Save content packages (default: true)")},
+			{TEXT("force"), TEXT("bool"), false, TEXT("Force exit (default: false)")},
+			{TEXT("delay_seconds"), TEXT("number"), false, TEXT("Delay before exit (default: 0.35)")}
+		}},
+		{TEXT("call_subsystem_function"), TEXT("editor"), TEXT("Call a BlueprintCallable function on a WorldSubsystem"), {
+			{TEXT("subsystem_class"), TEXT("string"), true, TEXT("Full class path")},
+			{TEXT("function_name"), TEXT("string"), true, TEXT("Function to call")},
+			{TEXT("parameters"), TEXT("object"), false, TEXT("Function parameters as key-value pairs")}
+		}},
+		{TEXT("add_to_actor_array_property"), TEXT("editor"), TEXT("Add actor references to an array property"), {
+			{TEXT("actor_name"), TEXT("string"), true, TEXT("Actor containing the array")},
+			{TEXT("property_name"), TEXT("string"), true, TEXT("Array property name")},
+			{TEXT("element_name"), TEXT("string"), false, TEXT("Single actor name to add")},
+			{TEXT("element_names"), TEXT("array"), false, TEXT("Array of actor names to add")}
+		}}
+	};
+}

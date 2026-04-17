@@ -35,3 +35,18 @@ TSharedPtr<IUnrealMCPCommandHandler> FUnrealMCPCommandRegistry::FindHandlerForCo
 
 	return nullptr;
 }
+
+TArray<FMCPCommandMeta> FUnrealMCPCommandRegistry::GetAllExtensionMetadata() const
+{
+	FScopeLock Lock(&HandlersMutex);
+
+	TArray<FMCPCommandMeta> AllMeta;
+	for (const TPair<FName, TSharedPtr<IUnrealMCPCommandHandler>>& Entry : Handlers)
+	{
+		if (Entry.Value.IsValid())
+		{
+			AllMeta.Append(Entry.Value->GetCommandMetadata());
+		}
+	}
+	return AllMeta;
+}

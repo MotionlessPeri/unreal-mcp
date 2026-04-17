@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Json.h"
+#include "UnrealMCPCommandMeta.h"
 
 /**
  * Handler class for Blueprint Node-related MCP commands
@@ -13,6 +14,8 @@ public:
 
     // Handle blueprint node commands
     TSharedPtr<FJsonObject> HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
+
+    static TArray<FMCPCommandMeta> GetCommandMetadata();
 
 private:
     // Specific blueprint node command handlers

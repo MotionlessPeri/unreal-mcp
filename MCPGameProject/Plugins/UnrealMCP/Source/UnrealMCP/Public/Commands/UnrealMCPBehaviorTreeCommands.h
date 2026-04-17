@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Json.h"
+#include "UnrealMCPCommandMeta.h"
 
 // Forward declarations
 class UBTNode;
@@ -20,6 +21,8 @@ public:
     FUnrealMCPBehaviorTreeCommands();
 
     TSharedPtr<FJsonObject> HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
+
+    static TArray<FMCPCommandMeta> GetCommandMetadata();
 
 private:
     TSharedPtr<FJsonObject> HandleGetBehaviorTreeInfo(const TSharedPtr<FJsonObject>& Params);

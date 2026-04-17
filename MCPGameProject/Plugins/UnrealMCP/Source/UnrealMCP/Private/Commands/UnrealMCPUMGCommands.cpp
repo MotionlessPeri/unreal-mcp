@@ -2387,4 +2387,123 @@ TSharedPtr<FJsonObject> FUnrealMCPUMGCommands::HandleSetTextBlockBinding(const T
 	Response->SetBoolField(TEXT("success"), true);
 	Response->SetStringField(TEXT("binding_name"), BindingName);
 	return Response;
-} 
+}
+
+TArray<FMCPCommandMeta> FUnrealMCPUMGCommands::GetCommandMetadata()
+{
+	return {
+		{TEXT("create_umg_widget_blueprint"), TEXT("umg"), TEXT("Create a new Widget Blueprint"), {
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Widget name (legacy alias: name)")},
+			{TEXT("path"), TEXT("string"), false, TEXT("Folder path (default: /Game/Widgets)")},
+			{TEXT("parent_class"), TEXT("string"), false, TEXT("Parent class path (default: UUserWidget)")}
+		}},
+		{TEXT("get_widget_tree"), TEXT("umg"), TEXT("Read the widget hierarchy of a Widget Blueprint"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")}
+		}},
+		{TEXT("ensure_widget_root"), TEXT("umg"), TEXT("Create or reuse a root widget"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_class"), TEXT("string"), true, TEXT("Root widget class")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Root widget name")},
+			{TEXT("replace_existing"), TEXT("bool"), false, TEXT("Replace existing root (default: false)")}
+		}},
+		{TEXT("add_widget_child"), TEXT("umg"), TEXT("Add a child widget under a parent panel"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_class"), TEXT("string"), true, TEXT("Child widget class")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Child widget name")},
+			{TEXT("parent_widget_name"), TEXT("string"), false, TEXT("Parent panel name (default: root)")},
+			{TEXT("is_variable"), TEXT("bool"), false, TEXT("Mark as variable (default: false)")}
+		}},
+		{TEXT("add_widget_child_batch"), TEXT("umg"), TEXT("Batch add multiple child widgets"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("items"), TEXT("array"), true, TEXT("Array of {widget_class, widget_name, parent_widget_name?, is_variable?}")}
+		}},
+		{TEXT("set_canvas_slot_layout"), TEXT("umg"), TEXT("Set layout for a widget in a CanvasPanel"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Widget name")},
+			{TEXT("position"), TEXT("array"), false, TEXT("[x, y]")},
+			{TEXT("size"), TEXT("array"), false, TEXT("[width, height]")},
+			{TEXT("alignment"), TEXT("array"), false, TEXT("[x, y]")},
+			{TEXT("anchors"), TEXT("array"), false, TEXT("[min_x, min_y, max_x, max_y]")},
+			{TEXT("auto_size"), TEXT("bool"), false, TEXT("Enable auto-sizing")},
+			{TEXT("z_order"), TEXT("number"), false, TEXT("Z-order")}
+		}},
+		{TEXT("set_canvas_slot_layout_batch"), TEXT("umg"), TEXT("Batch set canvas slot layout"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("items"), TEXT("array"), true, TEXT("Array of {widget_name, position?, size?, ...}")}
+		}},
+		{TEXT("set_uniform_grid_slot"), TEXT("umg"), TEXT("Set grid slot properties in a UniformGridPanel"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Widget name")},
+			{TEXT("row"), TEXT("number"), false, TEXT("Grid row index")},
+			{TEXT("column"), TEXT("number"), false, TEXT("Grid column index")},
+			{TEXT("horizontal_alignment"), TEXT("string"), false, TEXT("Fill/Left/Center/Right")},
+			{TEXT("vertical_alignment"), TEXT("string"), false, TEXT("Fill/Top/Center/Bottom")}
+		}},
+		{TEXT("set_uniform_grid_slot_batch"), TEXT("umg"), TEXT("Batch set uniform grid slot properties"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("items"), TEXT("array"), true, TEXT("Array of {widget_name, row?, column?, ...}")}
+		}},
+		{TEXT("set_widget_common_properties"), TEXT("umg"), TEXT("Set common widget properties"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Widget name")},
+			{TEXT("visibility"), TEXT("string"), false, TEXT("Visible/Collapsed/Hidden/HitTestInvisible/SelfHitTestInvisible")},
+			{TEXT("is_enabled"), TEXT("bool"), false, TEXT("Enable/disable widget")},
+			{TEXT("is_variable"), TEXT("bool"), false, TEXT("Mark as variable")}
+		}},
+		{TEXT("set_widget_common_properties_batch"), TEXT("umg"), TEXT("Batch set common widget properties"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("items"), TEXT("array"), true, TEXT("Array of {widget_name, visibility?, is_enabled?}")}
+		}},
+		{TEXT("set_text_block_properties"), TEXT("umg"), TEXT("Set text and color on a TextBlock"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("TextBlock widget name")},
+			{TEXT("text"), TEXT("string"), false, TEXT("Text content")},
+			{TEXT("color"), TEXT("array"), false, TEXT("[r, g, b, a] (0.0-1.0)")}
+		}},
+		{TEXT("set_text_block_properties_batch"), TEXT("umg"), TEXT("Batch set text block properties"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("items"), TEXT("array"), true, TEXT("Array of {widget_name, text?, color?}")}
+		}},
+		{TEXT("add_text_block_to_widget"), TEXT("umg"), TEXT("Add a TextBlock to a widget"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("TextBlock name")},
+			{TEXT("text"), TEXT("string"), false, TEXT("Initial text")},
+			{TEXT("position"), TEXT("array"), false, TEXT("[x, y]")}
+		}},
+		{TEXT("add_button_to_widget"), TEXT("umg"), TEXT("Add a Button to a widget"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Button name")},
+			{TEXT("text"), TEXT("string"), true, TEXT("Button label text")},
+			{TEXT("position"), TEXT("array"), false, TEXT("[x, y]")}
+		}},
+		{TEXT("bind_widget_event"), TEXT("umg"), TEXT("Bind a widget event to a component-bound event node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Widget name")},
+			{TEXT("event_name"), TEXT("string"), true, TEXT("Event name (e.g. OnClicked)")},
+			{TEXT("node_position"), TEXT("array"), false, TEXT("[x, y]")}
+		}},
+		{TEXT("set_text_block_binding"), TEXT("umg"), TEXT("Set a property binding on a TextBlock"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("TextBlock name")},
+			{TEXT("binding_name"), TEXT("string"), true, TEXT("Binding function name")}
+		}},
+		{TEXT("add_widget_to_viewport"), TEXT("umg"), TEXT("Add a widget to the viewport"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("z_order"), TEXT("number"), false, TEXT("Z-order (default: 0)")}
+		}},
+		{TEXT("clear_widget_children"), TEXT("umg"), TEXT("Clear all children of a panel widget"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), false, TEXT("Target panel (default: root)")}
+		}},
+		{TEXT("remove_widget_from_blueprint"), TEXT("umg"), TEXT("Remove a widget and its subtree"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Widget Blueprint name/path")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Widget to remove")}
+		}},
+		{TEXT("delete_widget_blueprints_by_prefix"), TEXT("umg"), TEXT("Delete Widget Blueprints matching a name prefix"), {
+			{TEXT("path"), TEXT("string"), true, TEXT("Content folder path")},
+			{TEXT("name_prefix"), TEXT("string"), true, TEXT("Name prefix to match")},
+			{TEXT("recursive"), TEXT("bool"), false, TEXT("Recurse into subdirs (default: true)")},
+			{TEXT("dry_run"), TEXT("bool"), false, TEXT("Preview only (default: false)")}
+		}}
+	};
+}

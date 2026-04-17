@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Json.h"
+#include "UnrealMCPCommandMeta.h"
 
 /**
  * Handles UMG (Widget Blueprint) related MCP commands
@@ -20,6 +21,8 @@ public:
      * @return JSON response with results or error
      */
     TSharedPtr<FJsonObject> HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
+
+    static TArray<FMCPCommandMeta> GetCommandMetadata();
 
 private:
     /**

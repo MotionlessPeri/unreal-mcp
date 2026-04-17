@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Json.h"
+#include "UnrealMCPCommandMeta.h"
 
 /**
  * Handler class for Editor-related MCP commands
@@ -14,6 +15,9 @@ public:
 
     // Handle editor commands
     TSharedPtr<FJsonObject> HandleCommand(const FString& CommandType, const TSharedPtr<FJsonObject>& Params);
+
+    /** Return metadata for all editor commands (for the help system). */
+    static TArray<FMCPCommandMeta> GetCommandMetadata();
 
 private:
     // Actor manipulation commands

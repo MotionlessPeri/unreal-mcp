@@ -461,3 +461,12 @@ TSharedPtr<FJsonObject> FUnrealMCPAnimationCommands::HandleGetMontageInfo(const 
 
     return Result;
 }
+
+TArray<FMCPCommandMeta> FUnrealMCPAnimationCommands::GetCommandMetadata()
+{
+	return {
+		{TEXT("get_montage_info"), TEXT("animation"), TEXT("Read an AnimMontage asset structure"), {
+			{TEXT("asset_path"), TEXT("string"), true, TEXT("Path to AnimMontage asset")}
+		}}
+	};
+}

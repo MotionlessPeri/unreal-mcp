@@ -1157,4 +1157,58 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintCommands::HandleSetPawnProperties(con
     ResponseObj->SetBoolField(TEXT("success"), bAnyPropertiesSet);
     ResponseObj->SetObjectField(TEXT("results"), ResultsObj);
     return ResponseObj;
+}
+
+TArray<FMCPCommandMeta> FUnrealMCPBlueprintCommands::GetCommandMetadata()
+{
+	return {
+		{TEXT("create_blueprint"), TEXT("blueprint"), TEXT("Create a new Blueprint asset"), {
+			{TEXT("name"), TEXT("string"), true, TEXT("Blueprint name")},
+			{TEXT("parent_class"), TEXT("string"), false, TEXT("Parent class (default: AActor)")}
+		}},
+		{TEXT("add_component_to_blueprint"), TEXT("blueprint"), TEXT("Add a component to a Blueprint"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("component_type"), TEXT("string"), true, TEXT("Component class")},
+			{TEXT("component_name"), TEXT("string"), true, TEXT("Instance name")},
+			{TEXT("location"), TEXT("array"), false, TEXT("[x, y, z]")},
+			{TEXT("rotation"), TEXT("array"), false, TEXT("[pitch, yaw, roll]")},
+			{TEXT("scale"), TEXT("array"), false, TEXT("[x, y, z]")}
+		}},
+		{TEXT("set_component_property"), TEXT("blueprint"), TEXT("Set a property on a Blueprint component"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("component_name"), TEXT("string"), true, TEXT("Component instance name")},
+			{TEXT("property_name"), TEXT("string"), true, TEXT("Property to set")},
+			{TEXT("property_value"), TEXT("any"), true, TEXT("Value to set")}
+		}},
+		{TEXT("set_physics_properties"), TEXT("blueprint"), TEXT("Set physics properties on a primitive component"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("component_name"), TEXT("string"), true, TEXT("Primitive component name")},
+			{TEXT("simulate_physics"), TEXT("bool"), false, TEXT("Enable physics simulation")},
+			{TEXT("mass"), TEXT("number"), false, TEXT("Mass in kg")},
+			{TEXT("linear_damping"), TEXT("number"), false, TEXT("Linear damping")},
+			{TEXT("angular_damping"), TEXT("number"), false, TEXT("Angular damping")}
+		}},
+		{TEXT("compile_blueprint"), TEXT("blueprint"), TEXT("Compile a Blueprint"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Blueprint to compile")}
+		}},
+		{TEXT("set_blueprint_property"), TEXT("blueprint"), TEXT("Set a class default property on a Blueprint"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("property_name"), TEXT("string"), true, TEXT("Property name")},
+			{TEXT("property_value"), TEXT("any"), true, TEXT("Value to set")}
+		}},
+		{TEXT("set_static_mesh_properties"), TEXT("blueprint"), TEXT("Set mesh/material on a StaticMeshComponent"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("component_name"), TEXT("string"), true, TEXT("StaticMeshComponent name")},
+			{TEXT("static_mesh"), TEXT("string"), false, TEXT("Asset path to StaticMesh")},
+			{TEXT("material"), TEXT("string"), false, TEXT("Asset path to Material")}
+		}},
+		{TEXT("set_pawn_properties"), TEXT("blueprint"), TEXT("Set pawn-specific properties"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint (must derive from Pawn)")},
+			{TEXT("auto_possess_player"), TEXT("any"), false, TEXT("AutoPossessPlayer enum value")},
+			{TEXT("use_controller_rotation_yaw"), TEXT("bool"), false, TEXT("Use controller yaw")},
+			{TEXT("use_controller_rotation_pitch"), TEXT("bool"), false, TEXT("Use controller pitch")},
+			{TEXT("use_controller_rotation_roll"), TEXT("bool"), false, TEXT("Use controller roll")},
+			{TEXT("can_be_damaged"), TEXT("bool"), false, TEXT("Can receive damage")}
+		}}
+	};
 } 

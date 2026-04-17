@@ -290,6 +290,7 @@ from tools.project_tools import register_project_tools
 from tools.umg_tools import register_umg_tools
 from tools.behavior_tree_tools import register_behavior_tree_tools
 from tools.animation_tools import register_animation_tools
+from tools.help_tools import register_help_tools
 if _HAS_DIALOGUE_EXTENSION:
     from tools.dialogue_tools import register_dialogue_tools
 if _HAS_LOGICDRIVER_EXTENSION:
@@ -303,6 +304,7 @@ register_project_tools(mcp)
 register_umg_tools(mcp)
 register_behavior_tree_tools(mcp)
 register_animation_tools(mcp)
+register_help_tools(mcp)
 if _HAS_DIALOGUE_EXTENSION:
     logger.info("Registering Dialogue tools because UnrealMCPDialogue extension is present")
     register_dialogue_tools(mcp)

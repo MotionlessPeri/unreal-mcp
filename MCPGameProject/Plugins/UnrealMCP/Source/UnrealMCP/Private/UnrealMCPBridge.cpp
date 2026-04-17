@@ -230,6 +230,88 @@ FString UUnrealMCPBridge::ExecuteCommand(const FString& CommandType, const TShar
                 ResultJson = MakeShareable(new FJsonObject);
                 ResultJson->SetStringField(TEXT("message"), TEXT("pong"));
             }
+            else if (CommandType == TEXT("help"))
+            {
+                ResultJson = MakeShareable(new FJsonObject);
+
+                // Collect metadata from all built-in handlers + extensions
+                TArray<FMCPCommandMeta> AllMeta;
+                // ping is hardcoded, add it manually
+                AllMeta.Add({TEXT("ping"), TEXT("system"), TEXT("Health check"), {}});
+                AllMeta.Add({TEXT("help"), TEXT("system"), TEXT("List available commands or get details for a specific command"), {
+                    {TEXT("command"), TEXT("string"), false, TEXT("Command name to get details for")}
+                }});
+                AllMeta.Append(FUnrealMCPEditorCommands::GetCommandMetadata());
+                AllMeta.Append(FUnrealMCPBlueprintCommands::GetCommandMetadata());
+                AllMeta.Append(FUnrealMCPBlueprintNodeCommands::GetCommandMetadata());
+                AllMeta.Append(FUnrealMCPProjectCommands::GetCommandMetadata());
+                AllMeta.Append(FUnrealMCPUMGCommands::GetCommandMetadata());
+                AllMeta.Append(FUnrealMCPBehaviorTreeCommands::GetCommandMetadata());
+                AllMeta.Append(FUnrealMCPAnimationCommands::GetCommandMetadata());
+                AllMeta.Append(FUnrealMCPCommandRegistry::Get().GetAllExtensionMetadata());
+
+                FString RequestedCommand;
+                if (Params.IsValid() && Params->TryGetStringField(TEXT("command"), RequestedCommand))
+                {
+                    // Detail mode: return info for one command
+                    const FMCPCommandMeta* Found = nullptr;
+                    for (const FMCPCommandMeta& Meta : AllMeta)
+                    {
+                        if (Meta.Name == RequestedCommand)
+                        {
+                            Found = &Meta;
+                            break;
+                        }
+                    }
+                    if (Found)
+                    {
+                        ResultJson->SetStringField(TEXT("command"), Found->Name);
+                        ResultJson->SetStringField(TEXT("category"), Found->Category);
+                        ResultJson->SetStringField(TEXT("description"), Found->Description);
+                        TArray<TSharedPtr<FJsonValue>> ParamsArray;
+                        for (const FMCPParamMeta& P : Found->Params)
+                        {
+                            TSharedPtr<FJsonObject> PObj = MakeShareable(new FJsonObject);
+                            PObj->SetStringField(TEXT("name"), P.Name);
+                            PObj->SetStringField(TEXT("type"), P.Type);
+                            PObj->SetBoolField(TEXT("required"), P.bRequired);
+                            PObj->SetStringField(TEXT("description"), P.Description);
+                            ParamsArray.Add(MakeShareable(new FJsonValueObject(PObj)));
+                        }
+                        ResultJson->SetArrayField(TEXT("params"), ParamsArray);
+                    }
+                    else
+                    {
+                        ResultJson->SetBoolField(TEXT("success"), false);
+                        ResultJson->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown command: %s"), *RequestedCommand));
+                    }
+                }
+                else
+                {
+                    // List mode: return all commands grouped by category
+                    TArray<TSharedPtr<FJsonValue>> CommandNames;
+                    TMap<FString, TArray<FString>> ByCategory;
+                    for (const FMCPCommandMeta& Meta : AllMeta)
+                    {
+                        CommandNames.Add(MakeShareable(new FJsonValueString(Meta.Name)));
+                        ByCategory.FindOrAdd(Meta.Category).Add(Meta.Name);
+                    }
+                    ResultJson->SetArrayField(TEXT("commands"), CommandNames);
+
+                    TSharedPtr<FJsonObject> CategoriesObj = MakeShareable(new FJsonObject);
+                    for (const auto& Pair : ByCategory)
+                    {
+                        TArray<TSharedPtr<FJsonValue>> Names;
+                        for (const FString& N : Pair.Value)
+                        {
+                            Names.Add(MakeShareable(new FJsonValueString(N)));
+                        }
+                        CategoriesObj->SetArrayField(Pair.Key, Names);
+                    }
+                    ResultJson->SetObjectField(TEXT("categories"), CategoriesObj);
+                    ResultJson->SetNumberField(TEXT("total_count"), AllMeta.Num());
+                }
+            }
             // Editor Commands (including actor manipulation)
             else if (CommandType == TEXT("get_actors_in_level") ||
                      CommandType == TEXT("find_actors_by_name") ||

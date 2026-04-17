@@ -3215,3 +3215,160 @@ TSharedPtr<FJsonObject> FUnrealMCPBlueprintNodeCommands::HandleAddBlueprintArray
     ResultObj->SetStringField(TEXT("output_pin"), OutputPinName);
     return ResultObj;
 }
+
+TArray<FMCPCommandMeta> FUnrealMCPBlueprintNodeCommands::GetCommandMetadata()
+{
+	return {
+		{TEXT("get_blueprint_graph_info"), TEXT("blueprint_node"), TEXT("Read a Blueprint graph's node structure, pins, and connections"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("graph_name"), TEXT("string"), false, TEXT("Graph name (default: EventGraph)")}
+		}},
+		{TEXT("add_blueprint_event_node"), TEXT("blueprint_node"), TEXT("Add an event node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("event_name"), TEXT("string"), true, TEXT("Event name")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_input_action_node"), TEXT("blueprint_node"), TEXT("Add an input action event node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("action_name"), TEXT("string"), true, TEXT("Input action name")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_function_node"), TEXT("blueprint_node"), TEXT("Add a function call node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("function_name"), TEXT("string"), true, TEXT("Function name")},
+			{TEXT("target"), TEXT("string"), false, TEXT("Target class")},
+			{TEXT("params"), TEXT("object"), false, TEXT("Parameter default values")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_get_self_component_reference"), TEXT("blueprint_node"), TEXT("Add a component variable reference node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("component_name"), TEXT("string"), true, TEXT("Component to reference")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_get_component_node"), TEXT("blueprint_node"), TEXT("Add a GetComponentByClass node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("component_name"), TEXT("string"), true, TEXT("Component class name")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_self_reference"), TEXT("blueprint_node"), TEXT("Add a self-reference node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_dynamic_cast_node"), TEXT("blueprint_node"), TEXT("Add a dynamic cast node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("target_class"), TEXT("string"), true, TEXT("Class to cast to")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_subsystem_getter_node"), TEXT("blueprint_node"), TEXT("Add a GetSubsystem node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("subsystem_class"), TEXT("string"), true, TEXT("Subsystem class name")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_make_struct_node"), TEXT("blueprint_node"), TEXT("Add a MakeStruct node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("struct_type"), TEXT("string"), true, TEXT("Struct type name")},
+			{TEXT("values"), TEXT("object"), false, TEXT("Struct field default values")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_branch_node"), TEXT("blueprint_node"), TEXT("Add an If/Branch node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_switch_enum_node"), TEXT("blueprint_node"), TEXT("Add a Switch on Enum node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("enum_type"), TEXT("string"), true, TEXT("Enum type name or path")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_array_get_node"), TEXT("blueprint_node"), TEXT("Add an Array Get node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y}")}
+		}},
+		{TEXT("add_blueprint_variable"), TEXT("blueprint_node"), TEXT("Add a member variable to a Blueprint"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("variable_name"), TEXT("string"), true, TEXT("Variable name")},
+			{TEXT("variable_type"), TEXT("string"), true, TEXT("Type: Boolean, Integer, Float, String, Vector")},
+			{TEXT("is_exposed"), TEXT("bool"), false, TEXT("Expose to editor")}
+		}},
+		{TEXT("bind_blueprint_multicast_delegate"), TEXT("blueprint_node"), TEXT("Bind a multicast delegate with auto-created CustomEvent"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("target_class"), TEXT("string"), true, TEXT("Class owning the delegate")},
+			{TEXT("delegate_name"), TEXT("string"), true, TEXT("Delegate property name")},
+			{TEXT("node_position"), TEXT("object"), false, TEXT("{x, y} for assign node")},
+			{TEXT("custom_event_position"), TEXT("object"), false, TEXT("{x, y} for custom event")},
+			{TEXT("target_node_id"), TEXT("string"), false, TEXT("Node providing the target object")},
+			{TEXT("target_output_pin"), TEXT("string"), false, TEXT("Pin on target node (default: ReturnValue)")},
+			{TEXT("exec_source_node_id"), TEXT("string"), false, TEXT("Node to chain exec from")},
+			{TEXT("exec_source_pin"), TEXT("string"), false, TEXT("Exec pin name (default: Then)")}
+		}},
+		{TEXT("connect_blueprint_nodes"), TEXT("blueprint_node"), TEXT("Connect two node pins"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("source_node_id"), TEXT("string"), true, TEXT("Source node GUID")},
+			{TEXT("source_pin"), TEXT("string"), true, TEXT("Source pin name")},
+			{TEXT("target_node_id"), TEXT("string"), true, TEXT("Target node GUID")},
+			{TEXT("target_pin"), TEXT("string"), true, TEXT("Target pin name")}
+		}},
+		{TEXT("disconnect_blueprint_nodes"), TEXT("blueprint_node"), TEXT("Disconnect a specific link between two pins"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("source_node_id"), TEXT("string"), true, TEXT("Source node GUID")},
+			{TEXT("source_pin"), TEXT("string"), true, TEXT("Source pin name")},
+			{TEXT("target_node_id"), TEXT("string"), true, TEXT("Target node GUID")},
+			{TEXT("target_pin"), TEXT("string"), true, TEXT("Target pin name")},
+			{TEXT("graph_name"), TEXT("string"), false, TEXT("Graph name (default: EventGraph)")}
+		}},
+		{TEXT("break_blueprint_node_pin_links"), TEXT("blueprint_node"), TEXT("Break all links on a specific pin"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_id"), TEXT("string"), true, TEXT("Node GUID")},
+			{TEXT("pin_name"), TEXT("string"), true, TEXT("Pin name")},
+			{TEXT("graph_name"), TEXT("string"), false, TEXT("Graph name (default: EventGraph)")}
+		}},
+		{TEXT("move_blueprint_node"), TEXT("blueprint_node"), TEXT("Move a single node to an absolute position"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_id"), TEXT("string"), true, TEXT("Node GUID")},
+			{TEXT("node_position"), TEXT("object"), true, TEXT("{x, y}")},
+			{TEXT("graph_name"), TEXT("string"), false, TEXT("Graph name (default: EventGraph)")}
+		}},
+		{TEXT("move_blueprint_nodes"), TEXT("blueprint_node"), TEXT("Batch move multiple nodes"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("moves"), TEXT("array"), true, TEXT("Array of {node_id, node_position: {x, y}}")},
+			{TEXT("graph_name"), TEXT("string"), false, TEXT("Graph name (default: EventGraph)")}
+		}},
+		{TEXT("delete_blueprint_node"), TEXT("blueprint_node"), TEXT("Delete a single node"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_id"), TEXT("string"), true, TEXT("Node GUID")},
+			{TEXT("graph_name"), TEXT("string"), false, TEXT("Graph name (default: EventGraph)")}
+		}},
+		{TEXT("delete_blueprint_nodes"), TEXT("blueprint_node"), TEXT("Batch delete multiple nodes"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_ids"), TEXT("array"), true, TEXT("Array of node GUID strings")},
+			{TEXT("graph_name"), TEXT("string"), false, TEXT("Graph name (default: EventGraph)")}
+		}},
+		{TEXT("set_blueprint_node_pin_default"), TEXT("blueprint_node"), TEXT("Set the default value of an input pin"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_id"), TEXT("string"), true, TEXT("Node GUID")},
+			{TEXT("pin_name"), TEXT("string"), true, TEXT("Input pin name")},
+			{TEXT("value"), TEXT("any"), true, TEXT("Default value")},
+			{TEXT("graph_name"), TEXT("string"), false, TEXT("Graph name (default: EventGraph)")}
+		}},
+		{TEXT("find_blueprint_nodes"), TEXT("blueprint_node"), TEXT("Find nodes by type in a graph"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("node_type"), TEXT("string"), true, TEXT("Node type (e.g. Event)")},
+			{TEXT("event_name"), TEXT("string"), false, TEXT("Filter by event name")}
+		}},
+		{TEXT("clear_blueprint_event_graph"), TEXT("blueprint_node"), TEXT("Clear all nodes from an event graph"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("keep_bound_events"), TEXT("bool"), false, TEXT("Preserve component bound events (default: false)")}
+		}},
+		{TEXT("clear_blueprint_event_exec_chain"), TEXT("blueprint_node"), TEXT("Remove all nodes chained after an event exec pin"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("event_node_id"), TEXT("string"), true, TEXT("Event node GUID")},
+			{TEXT("event_output_pin"), TEXT("string"), false, TEXT("Exec output pin name (default: Then)")}
+		}},
+		{TEXT("dedupe_blueprint_component_bound_events"), TEXT("blueprint_node"), TEXT("Remove duplicate component-bound event nodes"), {
+			{TEXT("blueprint_name"), TEXT("string"), true, TEXT("Target Blueprint")},
+			{TEXT("widget_name"), TEXT("string"), true, TEXT("Component/widget name")},
+			{TEXT("event_name"), TEXT("string"), true, TEXT("Event name")},
+			{TEXT("keep_node_id"), TEXT("string"), false, TEXT("GUID of the node to keep")},
+			{TEXT("event_output_pin"), TEXT("string"), false, TEXT("Exec pin name (default: Then)")}
+		}}
+	};
+}

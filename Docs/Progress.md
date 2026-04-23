@@ -17,12 +17,42 @@
 13. 2026-04-17 (agent usage guide + command reference docs + help command)
 14. 2026-04-17 (capability gaps backlog + Tier 1 introspection: pin defaults, interface graphs, blueprint info)
 15. 2026-04-17 (Tier 2 introspection: blueprint defaults CDO dump, data asset reader, asset registry listing)
+16. 2026-04-23 (MCP-3: dialogue Line ID commands — bind/unbind/query/list/registry_info)
 
 ## Current Milestone
 
 1. Stabilize blueprint graph automation for consumer projects (`StupidChess` as first consumer).
 
 ## Completed
+
+1. MCP-3 dialogue Line ID commands (2026-04-23):
+   - Added 5 commands to the `UnrealMCPDialogue` extension to mirror the
+     editor GUI's Line ID flow over TCP. Consumer: DialogueSystemSample
+     (v2 Line ID pipeline — `ULineRegistry` as single facade, SQLite
+     backend behind it).
+   - **`bind_dialogue_node_line`**: sets `LineId` on Speech/Choice nodes.
+     Choice nodes additionally batch-fill their ChoiceItem children via
+     `DialogueChoiceHelpers::ReplaceChoiceItemsWithLineIds`, using
+     `FDialogueLineIdConvention::IsChoiceItemOf` to find matching items
+     in the DB. ChoiceItem nodes rejected (parent Choice drives them).
+   - **`unbind_dialogue_node_line`**: clears LineId on Speech/Choice.
+     Choice cascades the clear into every ChoiceItem while preserving
+     pins/Condition/Callback — matches the GUI Unbind button.
+   - **`query_dialogue_line`**: single row lookup via
+     `ULineRegistry::Get()->GetLineRow`; returns LineType, DialogueID,
+     SpeakerID (+ display name joined from speakers table), Text, Notes,
+     NextNodes.
+   - **`list_dialogue_lines`**: full table dump via `GetAllLines` with
+     optional `dialogue_id` filter; rows sorted by LineId.
+   - **`dialogue_registry_info`**: registry availability + wrapper
+     `LineDatabase` path + line/speaker counts (triggers EnsureFullCache
+     on first call).
+   - C++ handlers live on `FUnrealMCPDialogueCommands`
+     (`HandleBindDialogueNodeLine` etc.); dispatcher if-else extended.
+   - Python tool: `dialogue_tools.py` gains 5 tool wrappers in a new
+     `MCP-3: Line ID` section.
+   - Docs: `Docs/commands-dialogue.md` extended with full reference for
+     all 5 commands; this Progress entry.
 
 1. Tier 2 introspection: defaults, data assets, asset registry (2026-04-17):
    - **T2-5 `get_blueprint_defaults`**: reads a Blueprint's CDO property container via `FJsonObjectConverter::UStructToJsonObject`. Covers arrays (e.g. `GrantAbilitiesOnStart`), enums, struct fields, and UObject references (serialized as object paths). Accepts optional `property_path` to narrow to a single top-level property; transient properties are skipped.

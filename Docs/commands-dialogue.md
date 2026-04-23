@@ -148,3 +148,74 @@ Set or clear a condition evaluator on a transition between nodes.
 | `condition_class_path` | string | no | Class path to condition evaluator (empty or omitted to clear) |
 
 **Returns:** `from_node_id`, `to_node_id`, `condition_class`.
+
+---
+
+## bind_dialogue_node_line
+
+Bind a LineId to a dialogue node. Equivalent to the Details panel "Pick Line..." button.
+
+- Speech node: sets `LineId` only.
+- Choice node: sets `LineId` AND batch-fills every `ChoiceItem` whose LineId matches the convention `<Choice>_<suffix>` in the DB (replaces existing items, same as the GUI Picker's Choice mode).
+- ChoiceItem nodes: returns an error. ChoiceItems are driven by their parent Choice's batch fill; bind the parent Choice instead.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | yes | Content path to DialogueAsset |
+| `node_id` | string | yes | Speech or Choice node GUID |
+| `line_id` | string | yes | Target LineId in the Line Database (e.g. `L_GE_Halt`) |
+
+**Returns:** `node_id`, `line_id`, `node_type`, `items_filled` (0 for Speech), `item_line_ids` (Choice only, sorted ChoiceItem LineIds).
+
+---
+
+## unbind_dialogue_node_line
+
+Clear a node's LineId. Equivalent to the Details panel "Unbind" button.
+
+- Speech node: `LineId` -> `None`.
+- Choice node: `LineId` -> `None` AND cascades into every `ChoiceItem` (their `LineId` -> `None`). Pin connections, `ConditionClass`, `CallbackClass` are preserved.
+- ChoiceItem nodes: returns an error (unbind parent Choice instead).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | yes | Content path to DialogueAsset |
+| `node_id` | string | yes | Speech or Choice node GUID |
+
+**Returns:** `node_id`, `choice_items_cleared` (0 for Speech).
+
+---
+
+## query_dialogue_line
+
+Look up a single Line row from the editor `ULineRegistry`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `line_id` | string | yes | LineId to query (e.g. `L_GE_Halt`) |
+
+**Returns:** `found` (bool). When found: `line_type`, `dialogue_id`, `speaker_id`, `speaker_display_name`, `text`, `notes`, `next_nodes` (array of LineIds; includes `__EXIT__` sentinel).
+
+---
+
+## list_dialogue_lines
+
+List all Line rows from the editor `ULineRegistry`, optionally filtered by `DialogueID`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `dialogue_id` | string | no | If present, return only rows whose `DialogueID` matches |
+
+**Returns:** `count`, `lines` (array of `{line_id, line_type, dialogue_id, speaker_id, text}`, sorted by LineId). If `dialogue_id` was given, also echoes it back as `dialogue_id_filter`.
+
+---
+
+## dialogue_registry_info
+
+Debug snapshot of `ULineRegistry` state.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| (none) | | | |
+
+**Returns:** `registry_available` (bool), `line_database_path` (string — `UDialogueSettings::LineDatabase`, may be empty), `line_count`, `speaker_count`. The counts trigger `EnsureFullCache` on first call (subsequent calls are O(1)).

@@ -26,7 +26,13 @@ namespace
 				CommandType == TEXT("disconnect_dialogue_nodes") ||
 				CommandType == TEXT("delete_dialogue_node") ||
 				CommandType == TEXT("add_dialogue_choice_item") ||
-				CommandType == TEXT("set_transition_condition");
+				CommandType == TEXT("set_transition_condition") ||
+				// MCP-3 Line ID commands
+				CommandType == TEXT("bind_dialogue_node_line") ||
+				CommandType == TEXT("unbind_dialogue_node_line") ||
+				CommandType == TEXT("query_dialogue_line") ||
+				CommandType == TEXT("list_dialogue_lines") ||
+				CommandType == TEXT("dialogue_registry_info");
 		}
 
 		virtual TSharedPtr<FJsonObject> HandleCommand(

@@ -11,6 +11,13 @@ MCP-2 (write):
   - connect_dialogue_nodes: Create an edge between two nodes.
   - disconnect_dialogue_nodes: Remove an edge between two nodes.
   - delete_dialogue_node: Remove a node from a DialogueAsset.
+
+MCP-3 (Line ID, mirrors Details panel Pick Line / Unbind):
+  - bind_dialogue_node_line: Set a node's LineId (Choice also batch-fills ChoiceItems).
+  - unbind_dialogue_node_line: Clear a node's LineId (Choice cascades to ChoiceItems).
+  - query_dialogue_line: Read a single row from ULineRegistry.
+  - list_dialogue_lines: List all rows, optionally filtered by DialogueID.
+  - dialogue_registry_info: Registry state + DB wrapper path (debug).
 """
 
 import logging
@@ -292,5 +299,130 @@ def register_dialogue_tools(mcp: FastMCP):
             if choice_text is not None:
                 params["choice_text"] = choice_text
             return _send("add_dialogue_choice_item", params)
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    # ================================================================
+    # MCP-3: Line ID (Pick Line / Unbind automation + Registry read)
+    # ================================================================
+
+    @mcp.tool()
+    def bind_dialogue_node_line(
+        ctx: Context,
+        asset_path: str,
+        node_id: str,
+        line_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Bind a Line ID to a dialogue node (= Details panel "Pick Line...").
+
+        - Speech node: sets LineId only.
+        - Choice node: sets LineId AND batch-fills all ChoiceItems whose
+          LineId matches the convention "<Choice>_<suffix>", replacing
+          existing items (same behavior as the GUI Picker's Choice mode).
+        - ChoiceItem nodes: ERROR. ChoiceItems are driven by their parent
+          Choice's batch fill; bind the parent Choice instead.
+
+        Args:
+            asset_path: Content path to the DialogueAsset.
+            node_id: GUID string of the Speech/Choice node.
+            line_id: Target LineId from the DB (e.g. "L_GE_Halt").
+
+        Returns:
+            Dict with node_id, line_id, node_type, items_filled, item_line_ids (Choice only).
+        """
+        try:
+            return _send("bind_dialogue_node_line", {
+                "asset_path": asset_path,
+                "node_id": node_id,
+                "line_id": line_id,
+            })
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    @mcp.tool()
+    def unbind_dialogue_node_line(
+        ctx: Context,
+        asset_path: str,
+        node_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Clear a node's LineId (= Details panel "Unbind").
+
+        - Speech node: LineId -> None.
+        - Choice node: LineId -> None AND cascades into every ChoiceItem
+          (their LineId also -> None). Pins / ConditionClass / CallbackClass
+          are preserved — only the LineId field is wiped.
+        - ChoiceItem nodes: ERROR (not directly unbindable; unbind parent Choice).
+
+        Args:
+            asset_path: Content path to the DialogueAsset.
+            node_id: GUID string of the Speech/Choice node.
+
+        Returns:
+            Dict with node_id and choice_items_cleared (0 for Speech).
+        """
+        try:
+            return _send("unbind_dialogue_node_line", {
+                "asset_path": asset_path,
+                "node_id": node_id,
+            })
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    @mcp.tool()
+    def query_dialogue_line(
+        ctx: Context,
+        line_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Look up a single Line row from the editor ULineRegistry.
+
+        Args:
+            line_id: LineId from the DB (e.g. "L_GE_Halt").
+
+        Returns:
+            Dict with found (bool). If found: line_type, dialogue_id,
+            speaker_id, speaker_display_name, text, notes, next_nodes (list).
+        """
+        try:
+            return _send("query_dialogue_line", {"line_id": line_id})
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    @mcp.tool()
+    def list_dialogue_lines(
+        ctx: Context,
+        dialogue_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        List all Line rows from the editor ULineRegistry, optionally filtered by DialogueID.
+
+        Args:
+            dialogue_id: Optional — only return rows with this DialogueID.
+
+        Returns:
+            Dict with count and lines (list of {line_id, line_type, dialogue_id,
+            speaker_id, text}), sorted by LineId.
+        """
+        try:
+            params: dict = {}
+            if dialogue_id is not None:
+                params["dialogue_id"] = dialogue_id
+            return _send("list_dialogue_lines", params)
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    @mcp.tool()
+    def dialogue_registry_info(ctx: Context) -> Dict[str, Any]:
+        """
+        Debug: report ULineRegistry state + LineDatabase wrapper path.
+
+        Returns:
+            Dict with registry_available (bool), line_database_path (string,
+            may be empty), line_count, speaker_count.
+        """
+        try:
+            return _send("dialogue_registry_info", {})
         except Exception as e:
             return {"success": False, "message": f"Error: {e}"}

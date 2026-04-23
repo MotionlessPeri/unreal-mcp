@@ -5,12 +5,17 @@
 #include "IAssetTools.h"
 #include "DialogueAsset.h"
 #include "DialogueAssetFactory.h"
+#include "DialogueLineIdConvention.h"
+#include "DialogueLineTypes.h"
 #include "DialogueNode.h"
+#include "DialogueSettings.h"
+#include "LineRegistry.h"
 #include "StateGraphNode.h"
 #include "DialogueEdgeTypes.h"
 #include "DialogueGraphNode.h"
 #include "DialogueGraphSchema.h"
 #include "DialogueChoiceHelpers.h"
+#include "StateGraphEdGraphNode.h"
 #include "DialogueSpeakerAsset.h"
 #include "DialogueConditionEvaluator.h"
 #include "EdGraph/EdGraph.h"
@@ -44,6 +49,16 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCommand(
 		return HandleAddDialogueChoiceItem(Params);
 	if (CommandType == TEXT("set_transition_condition"))
 		return HandleSetTransitionCondition(Params);
+	if (CommandType == TEXT("bind_dialogue_node_line"))
+		return HandleBindDialogueNodeLine(Params);
+	if (CommandType == TEXT("unbind_dialogue_node_line"))
+		return HandleUnbindDialogueNodeLine(Params);
+	if (CommandType == TEXT("query_dialogue_line"))
+		return HandleQueryDialogueLine(Params);
+	if (CommandType == TEXT("list_dialogue_lines"))
+		return HandleListDialogueLines(Params);
+	if (CommandType == TEXT("dialogue_registry_info"))
+		return HandleDialogueRegistryInfo(Params);
 
 	return FUnrealMCPCommonUtils::CreateErrorResponse(
 		FString::Printf(TEXT("Unknown dialogue command: %s"), *CommandType));
@@ -1150,5 +1165,321 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition
 	Result->SetStringField(TEXT("to_node_id"), ToNodeIdStr);
 	Result->SetStringField(TEXT("condition_class"),
 		FoundTransition->ConditionClass ? FoundTransition->ConditionClass->GetPathName() : TEXT(""));
+	return Result;
+}
+
+// ============================================================================
+// MCP-3: Line ID commands
+// Mirror the editor GUI "Pick Line..." / "Unbind" flow through TCP so automation
+// and live smoke can exercise Line binding without clicking Details panels.
+// ============================================================================
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleBindDialogueNodeLine(
+	const TSharedPtr<FJsonObject>& Params)
+{
+#if WITH_EDITOR
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path'"));
+
+	FString NodeIdStr;
+	if (!Params->TryGetStringField(TEXT("node_id"), NodeIdStr))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_id'"));
+
+	FString LineIdStr;
+	if (!Params->TryGetStringField(TEXT("line_id"), LineIdStr))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'line_id'"));
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("node_id"), TEXT("line_id")}))
+		return Err;
+
+	TSharedPtr<FJsonObject> Error;
+	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
+	if (!Asset) return Error;
+
+	UStateGraphNode* Node = FindNodeByGuid(Asset, NodeIdStr);
+	if (!Node)
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Node '%s' not found"), *NodeIdStr));
+
+	// ChoiceItem cannot be directly bound — mirrors the GUI rule: ChoiceItem
+	// LineIds are always set via their parent Choice's batch fill.
+	if (Cast<UDialogueChoiceItemNode>(Node))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			TEXT("ChoiceItem nodes cannot be bound directly; bind the parent Choice instead."));
+
+	const FName LineId(*LineIdStr);
+
+	// Speech: simple LineId assignment.
+	if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
+	{
+		Speech->Modify();
+		Speech->LineId = LineId;
+		Asset->MarkPackageDirty();
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetStringField(TEXT("node_id"), NodeIdStr);
+		Result->SetStringField(TEXT("line_id"), LineIdStr);
+		Result->SetStringField(TEXT("node_type"), TEXT("Speech"));
+		Result->SetNumberField(TEXT("items_filled"), 0);
+		return Result;
+	}
+
+	// Choice: set LineId + batch-fill ChoiceItems under that Choice (matches
+	// DialogueNodeLineIdCustomization's Pick callback for the Choice kind).
+	if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
+	{
+		// Resolve the child ChoiceItem LineIds from the Registry using the
+		// project-wide convention helper.
+		ULineRegistry* Reg = ULineRegistry::Get();
+		if (!Reg)
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				TEXT("ULineRegistry unavailable (engine subsystem not yet initialized?)"));
+
+		TMap<FName, FDialogueLineRow> AllLines;
+		Reg->GetAllLines(AllLines);
+
+		TArray<FName> ItemIds;
+		for (const TPair<FName, FDialogueLineRow>& Pair : AllLines)
+		{
+			if (Pair.Value.LineType != FName(TEXT("ChoiceItem"))) continue;
+			if (!FDialogueLineIdConvention::IsChoiceItemOf(Pair.Key, LineId)) continue;
+			ItemIds.Add(Pair.Key);
+		}
+		ItemIds.Sort([](const FName& A, const FName& B) { return A.LexicalLess(B); });
+
+		// Find the Editor GraphNode so ReplaceChoiceItemsWithLineIds can rebuild pins.
+#if WITH_EDITORONLY_DATA
+		UStateGraphEdGraphNode* GraphNode = nullptr;
+		if (Asset->EditorGraph)
+		{
+			for (UEdGraphNode* GN : Asset->EditorGraph->Nodes)
+			{
+				if (UStateGraphEdGraphNode* SG = Cast<UStateGraphEdGraphNode>(GN))
+				{
+					if (SG->RuntimeNode == Choice) { GraphNode = SG; break; }
+				}
+			}
+		}
+		if (!GraphNode)
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				TEXT("Could not find EdGraphNode for this Choice; cannot rebuild pins"));
+
+		Choice->Modify();
+		Choice->LineId = LineId;
+		const int32 Filled =
+			DialogueChoiceHelpers::ReplaceChoiceItemsWithLineIds(GraphNode, ItemIds);
+
+		Asset->MarkPackageDirty();
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetStringField(TEXT("node_id"), NodeIdStr);
+		Result->SetStringField(TEXT("line_id"), LineIdStr);
+		Result->SetStringField(TEXT("node_type"), TEXT("Choice"));
+		Result->SetNumberField(TEXT("items_filled"), Filled);
+
+		TArray<TSharedPtr<FJsonValue>> ItemIdArr;
+		for (const FName& Id : ItemIds)
+		{
+			ItemIdArr.Add(MakeShared<FJsonValueString>(Id.ToString()));
+		}
+		Result->SetArrayField(TEXT("item_line_ids"), ItemIdArr);
+		return Result;
+#else
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			TEXT("Choice batch-fill requires editor build"));
+#endif
+	}
+
+	return FUnrealMCPCommonUtils::CreateErrorResponse(
+		FString::Printf(TEXT("Node type '%s' does not carry a LineId"),
+			*Node->GetClass()->GetName()));
+#else
+	return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Line commands require editor build"));
+#endif
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleUnbindDialogueNodeLine(
+	const TSharedPtr<FJsonObject>& Params)
+{
+#if WITH_EDITOR
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path'"));
+
+	FString NodeIdStr;
+	if (!Params->TryGetStringField(TEXT("node_id"), NodeIdStr))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_id'"));
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("node_id")}))
+		return Err;
+
+	TSharedPtr<FJsonObject> Error;
+	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
+	if (!Asset) return Error;
+
+	UStateGraphNode* Node = FindNodeByGuid(Asset, NodeIdStr);
+	if (!Node)
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Node '%s' not found"), *NodeIdStr));
+
+	// ChoiceItem cannot be directly unbound — same rule as bind.
+	if (Cast<UDialogueChoiceItemNode>(Node))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			TEXT("ChoiceItem nodes cannot be unbound directly; unbind the parent Choice."));
+
+	int32 CascadeCleared = 0;
+
+	if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
+	{
+		Speech->Modify();
+		Speech->LineId = NAME_None;
+	}
+	else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
+	{
+		// Cascade: clear LineId on every ChoiceItem (pins/Condition/Callback preserved).
+		// Mirrors the GUI Unbind button's cascade behavior for Choice nodes.
+		Choice->Modify();
+		Choice->LineId = NAME_None;
+		for (UDialogueChoiceItemNode* Item : Choice->Items)
+		{
+			if (!Item || Item->LineId.IsNone()) continue;
+			Item->Modify();
+			Item->LineId = NAME_None;
+			++CascadeCleared;
+		}
+	}
+	else
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Node type '%s' does not carry a LineId"),
+				*Node->GetClass()->GetName()));
+	}
+
+	Asset->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("node_id"), NodeIdStr);
+	Result->SetNumberField(TEXT("choice_items_cleared"), CascadeCleared);
+	return Result;
+#else
+	return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Line commands require editor build"));
+#endif
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleQueryDialogueLine(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FString LineIdStr;
+	if (!Params->TryGetStringField(TEXT("line_id"), LineIdStr))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'line_id'"));
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {TEXT("line_id")}))
+		return Err;
+
+	ULineRegistry* Reg = ULineRegistry::Get();
+	if (!Reg)
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("ULineRegistry unavailable"));
+
+	FDialogueLineRow Row;
+	const bool bHit = Reg->GetLineRow(FName(*LineIdStr), Row);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetBoolField(TEXT("found"), bHit);
+	Result->SetStringField(TEXT("line_id"), LineIdStr);
+	if (bHit)
+	{
+		Result->SetStringField(TEXT("line_type"), Row.LineType.ToString());
+		Result->SetStringField(TEXT("dialogue_id"), Row.DialogueID.ToString());
+		Result->SetStringField(TEXT("speaker_id"), Row.SpeakerID.ToString());
+		Result->SetStringField(TEXT("text"), Row.Text.ToString());
+		Result->SetStringField(TEXT("notes"), Row.Notes);
+		TArray<TSharedPtr<FJsonValue>> NextArr;
+		for (const FName& N : Row.NextNodes)
+			NextArr.Add(MakeShared<FJsonValueString>(N.ToString()));
+		Result->SetArrayField(TEXT("next_nodes"), NextArr);
+
+		// Include Speaker display name (joined lookup) so callers don't have to
+		// make a second round trip for the common case.
+		const FText SpName = Reg->GetSpeakerDisplayName(Row.SpeakerID);
+		Result->SetStringField(TEXT("speaker_display_name"), SpName.ToString());
+	}
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleListDialogueLines(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FString DialogueIdFilter;
+	const bool bHasFilter = Params->TryGetStringField(TEXT("dialogue_id"), DialogueIdFilter);
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {TEXT("dialogue_id")}))
+		return Err;
+
+	ULineRegistry* Reg = ULineRegistry::Get();
+	if (!Reg)
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("ULineRegistry unavailable"));
+
+	TMap<FName, FDialogueLineRow> AllLines;
+	Reg->GetAllLines(AllLines);
+
+	// Sort for stable output.
+	TArray<FName> Keys;
+	AllLines.GetKeys(Keys);
+	Keys.Sort([](const FName& A, const FName& B) { return A.LexicalLess(B); });
+
+	TArray<TSharedPtr<FJsonValue>> LinesArr;
+	for (const FName& K : Keys)
+	{
+		const FDialogueLineRow& Row = AllLines[K];
+		if (bHasFilter && Row.DialogueID != FName(*DialogueIdFilter)) continue;
+
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("line_id"), K.ToString());
+		Obj->SetStringField(TEXT("line_type"), Row.LineType.ToString());
+		Obj->SetStringField(TEXT("dialogue_id"), Row.DialogueID.ToString());
+		Obj->SetStringField(TEXT("speaker_id"), Row.SpeakerID.ToString());
+		Obj->SetStringField(TEXT("text"), Row.Text.ToString());
+		LinesArr.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	if (bHasFilter) Result->SetStringField(TEXT("dialogue_id_filter"), DialogueIdFilter);
+	Result->SetNumberField(TEXT("count"), LinesArr.Num());
+	Result->SetArrayField(TEXT("lines"), LinesArr);
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDialogueRegistryInfo(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {}))
+		return Err;
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+
+	ULineRegistry* Reg = ULineRegistry::Get();
+	Result->SetBoolField(TEXT("registry_available"), Reg != nullptr);
+
+	const UDialogueSettings* Settings = GetDefault<UDialogueSettings>();
+	Result->SetStringField(TEXT("line_database_path"),
+		(Settings && !Settings->LineDatabase.IsNull())
+			? Settings->LineDatabase.ToString()
+			: FString());
+
+	if (Reg)
+	{
+		// Triggers EnsureFullCache on first call; subsequent calls are O(1).
+		Result->SetNumberField(TEXT("line_count"), Reg->GetLineCount());
+		Result->SetNumberField(TEXT("speaker_count"), Reg->GetSpeakerCount());
+	}
 	return Result;
 }

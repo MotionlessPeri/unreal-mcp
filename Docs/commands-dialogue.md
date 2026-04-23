@@ -15,9 +15,9 @@ Read all nodes from a Dialogue asset.
 | `asset_path` | string | yes | Content path to DialogueAsset (e.g. `/Game/Dialogues/DA_Test`) |
 
 **Returns:** `asset_name`, `nodes` — array of node objects:
-- All nodes: `node_id` (GUID), `node_type` (Entry/Speech/Choice/Exit), `position` (`{x, y}`)
+- All nodes: `node_id` (GUID), `node_type` (Entry/Speech/Choice/Exit), `position` (`{x, y}`), `callback_class_path` (string, empty if none), `line_id` (string, empty for Entry/Exit/Conduit/Reroute)
 - Speech: `speaker_name`, `speaker_asset_path`, `dialogue_text`
-- Choice: `speaker_name`, `speaker_asset_path`, `dialogue_text`, `choices` (array of `{text, item_node_id}`)
+- Choice: `speaker_name`, `speaker_asset_path`, `dialogue_text`, `choices` (array of `{text, item_node_id, line_id}`)
 
 ---
 
@@ -29,7 +29,7 @@ Read all connections (edges) in a Dialogue asset.
 |-----------|------|----------|-------------|
 | `asset_path` | string | yes | Content path to DialogueAsset |
 
-**Returns:** `connections` — array of `{from_node_id, from_pin, to_node_id, to_pin}`.
+**Returns:** `connections` — array of `{from_node_id, from_pin, to_node_id, to_pin, condition_class_path}`. `condition_class_path` is empty when no condition is attached.
 
 ---
 
@@ -148,6 +148,20 @@ Set or clear a condition evaluator on a transition between nodes.
 | `condition_class_path` | string | no | Class path to condition evaluator (empty or omitted to clear) |
 
 **Returns:** `from_node_id`, `to_node_id`, `condition_class`.
+
+---
+
+## set_node_callback_class
+
+Set or clear the `CallbackClass` on a dialogue node. Equivalent to the Details panel's Callback Class picker (or the double-click-creates-callback flow). Only nodes whose `SupportsCallbacks()` returns true accept this.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | yes | Content path to DialogueAsset |
+| `node_id` | string | yes | Node GUID |
+| `callback_class_path` | string | no | Class path (`/Game/.../BP_MyCB.BP_MyCB_C`) or BP asset path (`/Game/.../BP_MyCB.BP_MyCB`). Omit or pass `""` to clear. |
+
+**Returns:** `node_id`, `callback_class` (resolved path or `""`).
 
 ---
 

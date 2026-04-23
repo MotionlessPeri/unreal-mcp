@@ -34,6 +34,7 @@ private:
 	TSharedPtr<FJsonObject> HandleDeleteDialogueNode(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleAddDialogueChoiceItem(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleSetTransitionCondition(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetNodeCallbackClass(const TSharedPtr<FJsonObject>& Params);
 
 	// MCP-3: Line ID
 	TSharedPtr<FJsonObject> HandleBindDialogueNodeLine(const TSharedPtr<FJsonObject>& Params);

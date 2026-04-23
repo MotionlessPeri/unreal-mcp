@@ -16,10 +16,13 @@
 #include "DialogueGraphSchema.h"
 #include "DialogueChoiceHelpers.h"
 #include "StateGraphEdGraphNode.h"
+#include "StateGraphTransitionCompiler.h"
 #include "DialogueSpeakerAsset.h"
 #include "DialogueConditionEvaluator.h"
+#include "NodeCallback.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphSchema.h"
+#include "Engine/Blueprint.h"
 
 FUnrealMCPDialogueCommands::FUnrealMCPDialogueCommands()
 {
@@ -49,6 +52,8 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCommand(
 		return HandleAddDialogueChoiceItem(Params);
 	if (CommandType == TEXT("set_transition_condition"))
 		return HandleSetTransitionCondition(Params);
+	if (CommandType == TEXT("set_node_callback_class"))
+		return HandleSetNodeCallbackClass(Params);
 	if (CommandType == TEXT("bind_dialogue_node_line"))
 		return HandleBindDialogueNodeLine(Params);
 	if (CommandType == TEXT("unbind_dialogue_node_line"))
@@ -255,6 +260,20 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueGraph(
 		}
 		NodeObj->SetStringField(TEXT("node_type"), NodeType);
 
+		// CallbackClass lives on the UStateGraphNode base; emit its class path
+		// (empty when unassigned). Lets callers replicate callbacks between DAs
+		// without walking Unreal reflection manually.
+		NodeObj->SetStringField(TEXT("callback_class_path"),
+			Node->CallbackClass ? Node->CallbackClass->GetPathName() : TEXT(""));
+
+		// LineId is on Speech / Choice / ChoiceItem; surface it alongside the
+		// callback info so replicate tooling can key on LineId instead of GUID.
+		FName LineIdName = NAME_None;
+		if (UDialogueSpeechNode* Sp = Cast<UDialogueSpeechNode>(Node))      LineIdName = Sp->LineId;
+		else if (UDialogueChoiceNode* Ch = Cast<UDialogueChoiceNode>(Node)) LineIdName = Ch->LineId;
+		// ChoiceItem LineId is surfaced under its Choice's `choices[]` below.
+		NodeObj->SetStringField(TEXT("line_id"), LineIdName.ToString());
+
 #if WITH_EDITORONLY_DATA
 		TSharedPtr<FJsonObject> PosObj = MakeShared<FJsonObject>();
 		PosObj->SetNumberField(TEXT("x"), Node->NodePosition.X);
@@ -279,6 +298,10 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueGraph(
 				TSharedPtr<FJsonObject> ItemObj = MakeShared<FJsonObject>();
 				ItemObj->SetStringField(TEXT("text"), Item ? Item->ChoiceText.ToString() : TEXT(""));
 				ItemObj->SetStringField(TEXT("item_node_id"), Item ? Item->NodeId.ToString() : TEXT(""));
+				// ChoiceItem carries its own LineId; expose it so replicate tooling
+				// can cross-DA map by LineId without re-walking the parent Choice.
+				ItemObj->SetStringField(TEXT("line_id"),
+					Item ? Item->LineId.ToString() : TEXT(""));
 				ChoicesArr.Add(MakeShared<FJsonValueObject>(ItemObj));
 			}
 			NodeObj->SetArrayField(TEXT("choices"), ChoicesArr);
@@ -324,17 +347,22 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueConnections
 			continue;
 		}
 
-		auto MakeConn = [&](const FString& FromPin, UStateGraphNode* Target)
+		auto MakeConn = [&](const FString& FromPin, const FDialogueTransition& Trans)
 		{
-			if (!Target)
+			if (!Trans.TargetNode)
 			{
 				return;
 			}
 			TSharedPtr<FJsonObject> Conn = MakeShared<FJsonObject>();
 			Conn->SetStringField(TEXT("from_node_id"), Node->NodeId.ToString());
 			Conn->SetStringField(TEXT("from_pin"), FromPin);
-			Conn->SetStringField(TEXT("to_node_id"), Target->NodeId.ToString());
+			Conn->SetStringField(TEXT("to_node_id"), Trans.TargetNode->NodeId.ToString());
 			Conn->SetStringField(TEXT("to_pin"), TEXT("In"));
+			// Expose the transition's ConditionClass path (empty when no condition
+			// is attached) so replicate/audit tooling can see which edges carry
+			// conditions without a second round-trip.
+			Conn->SetStringField(TEXT("condition_class_path"),
+				Trans.ConditionClass ? Trans.ConditionClass->GetPathName() : TEXT(""));
 			ConnArr.Add(MakeShared<FJsonValueObject>(Conn));
 		};
 
@@ -343,7 +371,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueConnections
 			const FString PinName = TEXT("Out");
 			for (const FDialogueTransition& Trans : WithTrans->OutTransitions)
 			{
-				MakeConn(PinName, Trans.TargetNode);
+				MakeConn(PinName, Trans);
 			}
 		}
 		else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
@@ -357,7 +385,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueConnections
 				const FString PinName = FString::Printf(TEXT("Item_%d"), i);
 				for (const FDialogueTransition& Trans : Choice->Items[i]->OutTransitions)
 				{
-					MakeConn(PinName, Trans.TargetNode);
+					MakeConn(PinName, Trans);
 				}
 			}
 		}
@@ -746,6 +774,12 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleConnectDialogueNodes(
 		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("TryCreateConnection failed"));
 	}
 
+	// Pin-layer change must propagate to RuntimeNode OutTransitions. The
+	// editor's graph-changed handler normally does this, but only fires when
+	// the asset is open in an editor toolkit — MCP calls can arrive while the
+	// asset is only loaded into memory, so compile directly.
+	FStateGraphTransitionCompiler::Compile(Asset, Asset->EditorGraph);
+	Asset->EditorGraph->NotifyGraphChanged();
 	Asset->MarkPackageDirty();
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -829,6 +863,10 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDisconnectDialogueNode
 	const UEdGraphSchema* Schema = Asset->EditorGraph->GetSchema();
 	Schema->BreakSinglePinLink(OutPin, InPin);
 
+	// Compile directly; NotifyGraphChanged alone isn't enough when the asset
+	// has no open editor toolkit to listen. See HandleConnectDialogueNodes.
+	FStateGraphTransitionCompiler::Compile(Asset, Asset->EditorGraph);
+	Asset->EditorGraph->NotifyGraphChanged();
 	Asset->MarkPackageDirty();
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1165,6 +1203,73 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition
 	Result->SetStringField(TEXT("to_node_id"), ToNodeIdStr);
 	Result->SetStringField(TEXT("condition_class"),
 		FoundTransition->ConditionClass ? FoundTransition->ConditionClass->GetPathName() : TEXT(""));
+	return Result;
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetNodeCallbackClass(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path'"));
+
+	FString NodeIdStr;
+	if (!Params->TryGetStringField(TEXT("node_id"), NodeIdStr))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_id'"));
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("node_id"), TEXT("callback_class_path")}))
+		return Err;
+
+	TSharedPtr<FJsonObject> Error;
+	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
+	if (!Asset) return Error;
+
+	UStateGraphNode* Node = FindNodeByGuid(Asset, NodeIdStr);
+	if (!Node)
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Node '%s' not found"), *NodeIdStr));
+
+	if (!Node->SupportsCallbacks())
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Node '%s' (%s) does not support callbacks"),
+				*NodeIdStr, *Node->GetClass()->GetName()));
+
+	// Empty / omitted callback_class_path clears the callback (same convention
+	// as set_transition_condition).
+	FString CallbackPath;
+	Params->TryGetStringField(TEXT("callback_class_path"), CallbackPath);
+
+	Node->Modify();
+	if (CallbackPath.IsEmpty())
+	{
+		Node->CallbackClass = nullptr;
+	}
+	else
+	{
+		UClass* CbClass = LoadClass<UObject>(nullptr, *CallbackPath);
+		if (!CbClass)
+		{
+			// Try as asset path pointing at a Blueprint (GeneratedClass lookup).
+			UObject* Obj = UEditorAssetLibrary::LoadAsset(CallbackPath);
+			if (UBlueprint* BP = Cast<UBlueprint>(Obj))
+			{
+				CbClass = BP->GeneratedClass;
+			}
+		}
+		if (!CbClass)
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("Could not load callback class at '%s'"), *CallbackPath));
+		Node->CallbackClass = CbClass;
+	}
+
+	Asset->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("node_id"), NodeIdStr);
+	Result->SetStringField(TEXT("callback_class"),
+		Node->CallbackClass ? Node->CallbackClass->GetPathName() : TEXT(""));
 	return Result;
 }
 

@@ -27,6 +27,7 @@ namespace
 				CommandType == TEXT("delete_dialogue_node") ||
 				CommandType == TEXT("add_dialogue_choice_item") ||
 				CommandType == TEXT("set_transition_condition") ||
+				CommandType == TEXT("set_node_callback_class") ||
 				// MCP-3 Line ID commands
 				CommandType == TEXT("bind_dialogue_node_line") ||
 				CommandType == TEXT("unbind_dialogue_node_line") ||

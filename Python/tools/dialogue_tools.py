@@ -274,6 +274,36 @@ def register_dialogue_tools(mcp: FastMCP):
             return {"success": False, "message": f"Error: {e}"}
 
     @mcp.tool()
+    def set_node_callback_class(
+        ctx: Context,
+        asset_path: str,
+        node_id: str,
+        callback_class_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Set or clear the CallbackClass on a dialogue node (equivalent to the
+        Details panel "Callback Class" picker / double-click-creates-callback).
+
+        Args:
+            asset_path: Content path to the DialogueAsset.
+            node_id: GUID of the node.
+            callback_class_path: Full class path (e.g.
+                "/Game/Dialogues/NodeCallbacks/BP_MyCB.BP_MyCB_C")
+                or a BP asset path ("/Game/.../BP_MyCB.BP_MyCB").
+                Omit or pass "" to clear.
+
+        Returns:
+            Dict with node_id and callback_class (resolved path or "").
+        """
+        try:
+            params: dict = {"asset_path": asset_path, "node_id": node_id}
+            if callback_class_path is not None:
+                params["callback_class_path"] = callback_class_path
+            return _send("set_node_callback_class", params)
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    @mcp.tool()
     def add_dialogue_choice_item(
         ctx: Context,
         asset_path: str,

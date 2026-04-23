@@ -17,6 +17,8 @@
 #include "DialogueChoiceHelpers.h"
 #include "StateGraphEdGraphNode.h"
 #include "StateGraphTransitionCompiler.h"
+#include "StateGraphTransitionNode.h"
+#include "ConditionEvaluator.h"
 #include "DialogueSpeakerAsset.h"
 #include "DialogueConditionEvaluator.h"
 #include "NodeCallback.h"
@@ -1145,13 +1147,6 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition
 			FString::Printf(TEXT("Source node '%s' not found"), *FromNodeIdStr));
 	}
 
-	UDialogueNodeWithTransitions* TransNode = Cast<UDialogueNodeWithTransitions>(FromNode);
-	if (!TransNode)
-	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("Node '%s' does not support transitions"), *FromNodeIdStr));
-	}
-
 	UStateGraphNode* ToNode = FindNodeByGuid(Asset, ToNodeIdStr);
 	if (!ToNode)
 	{
@@ -1159,42 +1154,151 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition
 			FString::Printf(TEXT("Target node '%s' not found"), *ToNodeIdStr));
 	}
 
-	// Find the transition matching TargetNode
-	FDialogueTransition* FoundTransition = nullptr;
-	for (FDialogueTransition& Trans : TransNode->OutTransitions)
+	// ConditionClass lives on a graph-side UStateGraphTransitionNode that sits
+	// between the source's output pin and the target's input pin. Compile reads
+	// ConditionClass from that TransitionNode into OutTransitions — writing
+	// OutTransitions directly (old impl) is a dead write because the next
+	// Compile would overwrite it from the empty-or-missing TransitionNode.
+	//
+	// Flow:
+	//   1) Resolve source OutPin:
+	//        Speech          -> "Out" on the Speech graph node
+	//        ChoiceItem      -> "Item_<idx>" on the parent Choice graph node
+	//   2) Resolve target InPin.
+	//   3) Walk OutPin.LinkedTo:
+	//        (a) links directly to TargetInPin           -> need to insert TransitionNode
+	//        (b) links to an existing UStateGraphTransitionNode that reaches TargetInPin -> reuse
+	//   4) Set ConditionClass on that TransitionNode.
+	//   5) Compile + NotifyGraphChanged.
+#if WITH_EDITORONLY_DATA
+	UEdGraphPin* OutPin = nullptr;
+	if (UDialogueChoiceItemNode* Item = Cast<UDialogueChoiceItemNode>(FromNode))
 	{
-		if (Trans.TargetNode == ToNode)
+		UDialogueChoiceNode* ParentChoice = nullptr;
+		int32 ItemIdx = INDEX_NONE;
+		for (UStateGraphNode* N : Asset->AllNodes)
 		{
-			FoundTransition = &Trans;
-			break;
+			if (UDialogueChoiceNode* C = Cast<UDialogueChoiceNode>(N))
+			{
+				const int32 Found = C->Items.IndexOfByKey(Item);
+				if (Found != INDEX_NONE) { ParentChoice = C; ItemIdx = Found; break; }
+			}
+		}
+		if (!ParentChoice)
+		{
+			return FUnrealMCPCommonUtils::CreateErrorResponse(
+				FString::Printf(TEXT("ChoiceItem '%s' has no owning Choice"), *FromNodeIdStr));
+		}
+		const FString PinName = FString::Printf(TEXT("Item_%d"), ItemIdx);
+		OutPin = FindOutputPin(Asset, ParentChoice, PinName);
+	}
+	else if (Cast<UDialogueNodeWithTransitions>(FromNode))
+	{
+		OutPin = FindOutputPin(Asset, FromNode, TEXT("Out"));
+	}
+	else
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Node '%s' does not support transitions"), *FromNodeIdStr));
+	}
+	if (!OutPin)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Source output pin not found"));
+	}
+
+	UEdGraphPin* TargetInPin = FindInputPin(Asset, ToNode);
+	if (!TargetInPin)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Target input pin not found"));
+	}
+
+	// Find the TargetGraphNode (needed for NodePos when creating a new TransitionNode).
+	UStateGraphEdGraphNode* TargetGraphNode = nullptr;
+	for (UEdGraphNode* GN : Asset->EditorGraph->Nodes)
+	{
+		if (UStateGraphEdGraphNode* SGN = Cast<UStateGraphEdGraphNode>(GN))
+		{
+			if (SGN->RuntimeNode == ToNode) { TargetGraphNode = SGN; break; }
 		}
 	}
 
-	if (!FoundTransition)
+	UStateGraphTransitionNode* TransNode = nullptr;
+	bool bDirectEdge = false;
+	for (UEdGraphPin* Linked : OutPin->LinkedTo)
 	{
-		return FUnrealMCPCommonUtils::CreateErrorResponse(
-			FString::Printf(TEXT("No transition from '%s' to '%s'"), *FromNodeIdStr, *ToNodeIdStr));
+		if (Linked == TargetInPin)
+		{
+			bDirectEdge = true;
+			continue;
+		}
+		if (UStateGraphTransitionNode* TN = Cast<UStateGraphTransitionNode>(Linked->GetOwningNode()))
+		{
+			UEdGraphPin* TOut = TN->GetOutputPin();
+			if (TOut)
+			{
+				for (UEdGraphPin* TL : TOut->LinkedTo)
+				{
+					if (TL == TargetInPin) { TransNode = TN; break; }
+				}
+			}
+			if (TransNode) break;
+		}
 	}
 
-	TransNode->Modify();
-
-	// Load condition class or clear it
-	FString ConditionPath;
-	if (Params->TryGetStringField(TEXT("condition_class_path"), ConditionPath) && !ConditionPath.IsEmpty())
+	if (!TransNode && !bDirectEdge)
 	{
-		UClass* CondClass = LoadClass<UDialogueConditionEvaluator>(nullptr, *ConditionPath);
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("No edge from '%s' to '%s' (connect_dialogue_nodes first)"),
+				*FromNodeIdStr, *ToNodeIdStr));
+	}
+
+	// Insert TransitionNode when the edge was a direct pin-to-pin link.
+	if (!TransNode)
+	{
+		UEdGraph* Graph = Asset->EditorGraph;
+		Graph->Modify();
+		Asset->Modify();
+
+		TransNode = NewObject<UStateGraphTransitionNode>(Graph, NAME_None, RF_Transactional);
+		TransNode->CreateNewGuid();
+		TransNode->PostPlacedNewNode();
+		UEdGraphNode* SrcEdGN = OutPin->GetOwningNode();
+		if (SrcEdGN && TargetGraphNode)
+		{
+			TransNode->NodePosX = (SrcEdGN->NodePosX + TargetGraphNode->NodePosX) / 2;
+			TransNode->NodePosY = (SrcEdGN->NodePosY + TargetGraphNode->NodePosY) / 2;
+		}
+		Graph->AddNode(TransNode, false, false);
+		TransNode->AllocateDefaultPins();
+
+		// Re-wire: break the direct pin link, then connect through TransitionNode.
+		OutPin->BreakLinkTo(TargetInPin);
+		OutPin->MakeLinkTo(TransNode->GetInputPin());
+		TransNode->GetOutputPin()->MakeLinkTo(TargetInPin);
+	}
+
+	// Apply ConditionClass on the graph-side TransitionNode (source of truth).
+	TransNode->Modify();
+	FString ConditionPath;
+	if (Params->TryGetStringField(TEXT("condition_class_path"), ConditionPath)
+		&& !ConditionPath.IsEmpty())
+	{
+		UClass* CondClass = LoadClass<UConditionEvaluator>(nullptr, *ConditionPath);
 		if (!CondClass)
 		{
 			return FUnrealMCPCommonUtils::CreateErrorResponse(
 				FString::Printf(TEXT("Could not load condition class at '%s'"), *ConditionPath));
 		}
-		FoundTransition->ConditionClass = CondClass;
+		TransNode->ConditionClass = CondClass;
 	}
 	else
 	{
-		FoundTransition->ConditionClass = nullptr;
+		TransNode->ConditionClass = nullptr;
 	}
 
+	// Compile so OutTransitions picks up the ConditionClass; notify for live UI refresh.
+	FStateGraphTransitionCompiler::Compile(Asset, Asset->EditorGraph);
+	Asset->EditorGraph->NotifyGraphChanged();
 	Asset->MarkPackageDirty();
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1202,8 +1306,12 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetTransitionCondition
 	Result->SetStringField(TEXT("from_node_id"), FromNodeIdStr);
 	Result->SetStringField(TEXT("to_node_id"), ToNodeIdStr);
 	Result->SetStringField(TEXT("condition_class"),
-		FoundTransition->ConditionClass ? FoundTransition->ConditionClass->GetPathName() : TEXT(""));
+		TransNode->ConditionClass ? TransNode->ConditionClass->GetPathName() : TEXT(""));
+	Result->SetBoolField(TEXT("transition_node_created"), bDirectEdge);
 	return Result;
+#else
+	return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Write commands require editor build"));
+#endif
 }
 
 TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetNodeCallbackClass(

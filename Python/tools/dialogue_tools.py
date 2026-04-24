@@ -18,6 +18,10 @@ MCP-3 (Line ID, mirrors Details panel Pick Line / Unbind):
   - query_dialogue_line: Read a single row from ULineRegistry.
   - list_dialogue_lines: List all rows, optionally filtered by DialogueID.
   - dialogue_registry_info: Registry state + DB wrapper path (debug).
+
+MCP-4 (Speaker migration, for schema change TObjectPtr<UDialogueSpeakerAsset> -> FName SpeakerId):
+  - list_dialogue_nodes: Enumerate nodes + Speaker UPROPERTY state via reflection.
+  - set_dialogue_node_speaker_id: Write FName SpeakerId on a node by GUID.
 """
 
 import logging
@@ -454,5 +458,64 @@ def register_dialogue_tools(mcp: FastMCP):
         """
         try:
             return _send("dialogue_registry_info", {})
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    # ================================================================
+    # MCP-4: Speaker migration (M-speaker-arch, 2026-04-24)
+    # ================================================================
+
+    @mcp.tool()
+    def list_dialogue_nodes(
+        ctx: Context,
+        asset_path: str,
+    ) -> Dict[str, Any]:
+        """
+        List all nodes in a DialogueAsset with their Speaker/SpeakerId state.
+
+        Survives schema changes via reflection: pre-migration returns
+        `speaker_ref` (UObject path of legacy Speaker UPROPERTY); post-migration
+        returns `speaker_id` (FName string). Missing UPROPERTYs are omitted.
+
+        Nested Choice items are also listed alongside top-level nodes.
+
+        Args:
+            asset_path: Content-browser path, e.g. "/Game/Dialogues/DA_Test".
+
+        Returns:
+            Dict with asset_path, node_count, nodes (array of {node_id, class,
+            speaker_ref?, speaker_id?}).
+        """
+        try:
+            return _send("list_dialogue_nodes", {"asset_path": asset_path})
+        except Exception as e:
+            return {"success": False, "message": f"Error: {e}"}
+
+    @mcp.tool()
+    def set_dialogue_node_speaker_id(
+        ctx: Context,
+        asset_path: str,
+        node_id: str,
+        speaker_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Set the FName SpeakerId UPROPERTY on a dialogue node.
+
+        Requires the new schema (FName SpeakerId) to be in place. Marks the
+        owning package dirty; save via editor Save All or save_and_exit_editor.
+
+        Pass speaker_id="" to clear to NAME_None.
+
+        Args:
+            asset_path: Content-browser path, e.g. "/Game/Dialogues/DA_Test".
+            node_id: Node GUID string (e.g. from list_dialogue_nodes).
+            speaker_id: DB speakers.SpeakerID value (e.g. "SP_NPC_A") or "".
+        """
+        try:
+            return _send("set_dialogue_node_speaker_id", {
+                "asset_path": asset_path,
+                "node_id": node_id,
+                "speaker_id": speaker_id,
+            })
         except Exception as e:
             return {"success": False, "message": f"Error: {e}"}

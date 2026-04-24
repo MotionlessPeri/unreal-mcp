@@ -43,6 +43,12 @@ private:
 	TSharedPtr<FJsonObject> HandleListDialogueLines(const TSharedPtr<FJsonObject>& Params);
 	TSharedPtr<FJsonObject> HandleDialogueRegistryInfo(const TSharedPtr<FJsonObject>& Params);
 
+	// MCP-4: Speaker migration (list nodes with Speaker/SpeakerId via reflection;
+	// set new FName SpeakerId UPROPERTY). Designed to survive a schema change where
+	// TObjectPtr<UDialogueSpeakerAsset> Speaker is replaced by FName SpeakerId.
+	TSharedPtr<FJsonObject> HandleListDialogueNodes(const TSharedPtr<FJsonObject>& Params);
+	TSharedPtr<FJsonObject> HandleSetDialogueNodeSpeakerId(const TSharedPtr<FJsonObject>& Params);
+
 	UDialogueAsset* LoadDialogueAsset(const FString& AssetPath, TSharedPtr<FJsonObject>& OutError);
 	UStateGraphNode* FindNodeByGuid(UDialogueAsset* Asset, const FString& NodeIdStr);
 	UEdGraphPin* FindOutputPin(UDialogueAsset* Asset, UStateGraphNode* Node, const FString& PinName);

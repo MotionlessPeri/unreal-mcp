@@ -33,7 +33,10 @@ namespace
 				CommandType == TEXT("unbind_dialogue_node_line") ||
 				CommandType == TEXT("query_dialogue_line") ||
 				CommandType == TEXT("list_dialogue_lines") ||
-				CommandType == TEXT("dialogue_registry_info");
+				CommandType == TEXT("dialogue_registry_info") ||
+				// MCP-4 Speaker migration commands
+				CommandType == TEXT("list_dialogue_nodes") ||
+				CommandType == TEXT("set_dialogue_node_speaker_id");
 		}
 
 		virtual TSharedPtr<FJsonObject> HandleCommand(

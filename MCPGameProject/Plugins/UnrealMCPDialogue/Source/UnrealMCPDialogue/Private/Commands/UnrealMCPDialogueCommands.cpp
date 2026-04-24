@@ -66,6 +66,10 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleCommand(
 		return HandleListDialogueLines(Params);
 	if (CommandType == TEXT("dialogue_registry_info"))
 		return HandleDialogueRegistryInfo(Params);
+	if (CommandType == TEXT("list_dialogue_nodes"))
+		return HandleListDialogueNodes(Params);
+	if (CommandType == TEXT("set_dialogue_node_speaker_id"))
+		return HandleSetDialogueNodeSpeakerId(Params);
 
 	return FUnrealMCPCommonUtils::CreateErrorResponse(
 		FString::Printf(TEXT("Unknown dialogue command: %s"), *CommandType));
@@ -1695,4 +1699,150 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleDialogueRegistryInfo(
 		Result->SetNumberField(TEXT("speaker_count"), Reg->GetSpeakerCount());
 	}
 	return Result;
+}
+
+// =============================================================================
+// MCP-4: Speaker migration (for M-speaker-arch, 2026-04-24)
+//
+// `list_dialogue_nodes` reads both the legacy `Speaker` UObject ref (pre-migration)
+// and the new `SpeakerId` FName (post-migration) via reflection — so it survives
+// the schema change. Whichever UPROPERTY exists at the time of call is returned;
+// missing fields are omitted from the JSON.
+//
+// `set_dialogue_node_speaker_id` writes the new FName SpeakerId via reflection.
+// Only works after the schema change lands.
+// =============================================================================
+
+namespace SpeakerArchReflect
+{
+	/** Reads a UObject* UPROPERTY via reflection. Returns GetPathName() or "None". Empty if property missing. */
+	static FString ReadObjectPropertyPath(const UObject* Obj, const FName PropertyName)
+	{
+		if (!Obj) return FString();
+		FObjectProperty* ObjProp = CastField<FObjectProperty>(Obj->GetClass()->FindPropertyByName(PropertyName));
+		if (!ObjProp) return FString();
+		UObject* Val = ObjProp->GetObjectPropertyValue_InContainer(Obj);
+		return Val ? Val->GetPathName() : FString(TEXT("None"));
+	}
+
+	/** Reads an FName UPROPERTY via reflection. Returns ToString() or empty (including for NAME_None). */
+	static FString ReadFNamePropertyString(const UObject* Obj, const FName PropertyName)
+	{
+		if (!Obj) return FString();
+		FNameProperty* NameProp = CastField<FNameProperty>(Obj->GetClass()->FindPropertyByName(PropertyName));
+		if (!NameProp) return FString();
+		FName Val = NameProp->GetPropertyValue_InContainer(Obj);
+		return Val.IsNone() ? FString() : Val.ToString();
+	}
+
+	/** Writes an FName UPROPERTY via reflection + Modify + MarkPackageDirty. Returns false + OutError if property missing. */
+	static bool WriteFNameProperty(UObject* Obj, const FName PropertyName, const FName Value, FString& OutError)
+	{
+		if (!Obj) { OutError = TEXT("null object"); return false; }
+		FNameProperty* NameProp = CastField<FNameProperty>(Obj->GetClass()->FindPropertyByName(PropertyName));
+		if (!NameProp)
+		{
+			OutError = FString::Printf(TEXT("UPROPERTY '%s' not found on class %s (is the schema migrated?)"),
+				*PropertyName.ToString(), *Obj->GetClass()->GetName());
+			return false;
+		}
+		NameProp->SetPropertyValue_InContainer(Obj, Value);
+		Obj->Modify();
+		Obj->MarkPackageDirty();
+		return true;
+	}
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleListDialogueNodes(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			TEXT("Missing 'asset_path' parameter (e.g. \"/Game/Dialogues/DA_Test\")"));
+	}
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params, {TEXT("asset_path")}))
+		return Err;
+
+	TSharedPtr<FJsonObject> Error;
+	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
+	if (!Asset) return Error;
+
+	TArray<TSharedPtr<FJsonValue>> NodesArr;
+
+	auto EmitNode = [&](UStateGraphNode* Node)
+	{
+		if (!Node) return;
+		TSharedPtr<FJsonObject> N = MakeShared<FJsonObject>();
+		N->SetStringField(TEXT("node_id"), Node->NodeId.ToString());
+		N->SetStringField(TEXT("class"), Node->GetClass()->GetName());
+
+		const FString SpeakerRef = SpeakerArchReflect::ReadObjectPropertyPath(Node, TEXT("Speaker"));
+		const FString SpeakerId  = SpeakerArchReflect::ReadFNamePropertyString(Node, TEXT("SpeakerId"));
+		if (!SpeakerRef.IsEmpty()) N->SetStringField(TEXT("speaker_ref"), SpeakerRef);
+		if (!SpeakerId.IsEmpty())  N->SetStringField(TEXT("speaker_id"),  SpeakerId);
+
+		NodesArr.Add(MakeShared<FJsonValueObject>(N));
+	};
+
+	for (UStateGraphNode* Node : Asset->AllNodes)
+	{
+		EmitNode(Node);
+		// Also dump nested ChoiceItems so the migration can address them individually if needed.
+		if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
+		{
+			for (UDialogueChoiceItemNode* Item : Choice->Items)
+			{
+				EmitNode(Item);
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("asset_path"), Asset->GetPathName());
+	Result->SetNumberField(TEXT("node_count"), NodesArr.Num());
+	Result->SetArrayField(TEXT("nodes"), NodesArr);
+	return FUnrealMCPCommonUtils::CreateSuccessResponse(Result);
+}
+
+TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetDialogueNodeSpeakerId(
+	const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath, NodeIdStr, SpeakerIdStr;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'asset_path' parameter"));
+	if (!Params->TryGetStringField(TEXT("node_id"), NodeIdStr))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'node_id' parameter"));
+	if (!Params->TryGetStringField(TEXT("speaker_id"), SpeakerIdStr))
+		return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'speaker_id' parameter"));
+
+	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
+		{TEXT("asset_path"), TEXT("node_id"), TEXT("speaker_id")}))
+		return Err;
+
+	TSharedPtr<FJsonObject> Error;
+	UDialogueAsset* Asset = LoadDialogueAsset(AssetPath, Error);
+	if (!Asset) return Error;
+
+	UStateGraphNode* Node = FindNodeByGuid(Asset, NodeIdStr);
+	if (!Node)
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(
+			FString::Printf(TEXT("Node '%s' not found in %s"), *NodeIdStr, *AssetPath));
+	}
+
+	FString WriteErr;
+	const FName NewId = SpeakerIdStr.IsEmpty() ? NAME_None : FName(*SpeakerIdStr);
+	if (!SpeakerArchReflect::WriteFNameProperty(Node, TEXT("SpeakerId"), NewId, WriteErr))
+	{
+		return FUnrealMCPCommonUtils::CreateErrorResponse(WriteErr);
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("asset_path"), Asset->GetPathName());
+	Result->SetStringField(TEXT("node_id"), NodeIdStr);
+	Result->SetStringField(TEXT("speaker_id"), NewId.IsNone() ? FString() : NewId.ToString());
+	Result->SetBoolField(TEXT("written"), true);
+	return FUnrealMCPCommonUtils::CreateSuccessResponse(Result);
 }

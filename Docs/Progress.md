@@ -19,6 +19,7 @@
 15. 2026-04-17 (Tier 2 introspection: blueprint defaults CDO dump, data asset reader, asset registry listing)
 16. 2026-04-23 (MCP-3: dialogue Line ID commands — bind/unbind/query/list/registry_info)
 17. 2026-04-24 (MCP-4: dialogue speaker migration — list_dialogue_nodes + set_dialogue_node_speaker_id, reflection-based to survive node schema change TObjectPtr<Speaker> → FName SpeakerId)
+18. 2026-04-25 (MCP-4 follow-up: track Adhoc UPROPERTY rename — list_dialogue_nodes returns adhoc_speaker_id raw + speaker_id resolved (via GetSpeakerId UFUNCTION); set_dialogue_node_properties / speaker_id writes go to AdhocSpeakerId/AdhocDialogueText/AdhocChoiceText)
 
 ## Current Milestone
 

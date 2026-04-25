@@ -19,7 +19,6 @@
 #include "StateGraphTransitionCompiler.h"
 #include "StateGraphTransitionNode.h"
 #include "ConditionEvaluator.h"
-#include "DialogueSpeakerAsset.h"
 #include "DialogueConditionEvaluator.h"
 #include "NodeCallback.h"
 #include "EdGraph/EdGraph.h"
@@ -289,20 +288,25 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleGetDialogueGraph(
 
 		if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
 		{
+			// speaker_id / dialogue_text are RESOLVED values (Bound LineId pulls from
+			// DB; Ad-hoc returns the Adhoc UPROPERTY). For raw UPROPERTY values use
+			// list_dialogue_nodes which exposes adhoc_speaker_id explicitly.
 			NodeObj->SetStringField(TEXT("speaker_name"), Speech->GetDisplaySpeakerName().ToString());
-			NodeObj->SetStringField(TEXT("speaker_asset_path"), Speech->Speaker ? Speech->Speaker->GetPathName() : TEXT(""));
-			NodeObj->SetStringField(TEXT("dialogue_text"), Speech->DialogueText.ToString());
+			const FName SpeechSpeakerId = Speech->GetSpeakerId();
+			NodeObj->SetStringField(TEXT("speaker_id"), SpeechSpeakerId.IsNone() ? TEXT("") : SpeechSpeakerId.ToString());
+			NodeObj->SetStringField(TEXT("dialogue_text"), Speech->GetDisplayText().ToString());
 		}
 		else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
 		{
 			NodeObj->SetStringField(TEXT("speaker_name"), Choice->GetDisplaySpeakerName().ToString());
-			NodeObj->SetStringField(TEXT("speaker_asset_path"), Choice->Speaker ? Choice->Speaker->GetPathName() : TEXT(""));
-			NodeObj->SetStringField(TEXT("dialogue_text"), Choice->DialogueText.ToString());
+			const FName ChoiceSpeakerId = Choice->GetSpeakerId();
+			NodeObj->SetStringField(TEXT("speaker_id"), ChoiceSpeakerId.IsNone() ? TEXT("") : ChoiceSpeakerId.ToString());
+			NodeObj->SetStringField(TEXT("dialogue_text"), Choice->GetDisplayText().ToString());
 			TArray<TSharedPtr<FJsonValue>> ChoicesArr;
 			for (const TObjectPtr<UDialogueChoiceItemNode>& Item : Choice->Items)
 			{
 				TSharedPtr<FJsonObject> ItemObj = MakeShared<FJsonObject>();
-				ItemObj->SetStringField(TEXT("text"), Item ? Item->ChoiceText.ToString() : TEXT(""));
+				ItemObj->SetStringField(TEXT("text"), Item ? Item->GetChoiceText().ToString() : TEXT(""));
 				ItemObj->SetStringField(TEXT("item_node_id"), Item ? Item->NodeId.ToString() : TEXT(""));
 				// ChoiceItem carries its own LineId; expose it so replicate tooling
 				// can cross-DA map by LineId without re-walking the parent Choice.
@@ -602,7 +606,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetDialogueNodePropert
 	}
 
 	if (auto Err = FUnrealMCPCommonUtils::CheckUnknownParams(Params,
-		{TEXT("asset_path"), TEXT("node_id"), TEXT("speaker_name"), TEXT("speaker_asset_path"),
+		{TEXT("asset_path"), TEXT("node_id"), TEXT("speaker_name"), TEXT("speaker_id"),
 		 TEXT("dialogue_text"), TEXT("choice_text"), TEXT("pos_x"), TEXT("pos_y")}))
 		return Err;
 
@@ -622,54 +626,46 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetDialogueNodePropert
 
 	Node->Modify();
 
-	// --- Speaker asset (Speech and Choice nodes) ---
-	FString SpeakerPath;
-	if (Params->TryGetStringField(TEXT("speaker_asset_path"), SpeakerPath))
+	// --- speaker_id (Speech and Choice nodes) ---
+	// Writes the AdhocSpeakerId UPROPERTY (the only mutable speaker field).
+	// In Bound LineId mode this value is ignored at runtime — DB lines.SpeakerID
+	// is authoritative — but the field is still stored for fallback use when
+	// the user later unbinds the line.
+	FString SpeakerIdVal;
+	if (Params->TryGetStringField(TEXT("speaker_id"), SpeakerIdVal))
 	{
-		UObject* SpeakerObj = UEditorAssetLibrary::LoadAsset(SpeakerPath);
-		if (!SpeakerObj)
-		{
-			return FUnrealMCPCommonUtils::CreateErrorResponse(
-				FString::Printf(TEXT("Could not load asset at '%s'"), *SpeakerPath));
-		}
-		UDialogueSpeakerAsset* SpeakerAsset = Cast<UDialogueSpeakerAsset>(SpeakerObj);
-		if (!SpeakerAsset)
-		{
-			return FUnrealMCPCommonUtils::CreateErrorResponse(
-				FString::Printf(TEXT("Asset at '%s' is not a UDialogueSpeakerAsset (class: %s)"),
-					*SpeakerPath, *SpeakerObj->GetClass()->GetName()));
-		}
+		const FName NewId = SpeakerIdVal.IsEmpty() ? NAME_None : FName(*SpeakerIdVal);
 		if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
 		{
-			Speech->Speaker = SpeakerAsset;
+			Speech->AdhocSpeakerId = NewId;
 		}
 		else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
 		{
-			Choice->Speaker = SpeakerAsset;
+			Choice->AdhocSpeakerId = NewId;
 		}
 	}
 
-	// --- dialogue_text (Speech and Choice nodes) ---
+	// --- dialogue_text (Speech and Choice nodes) — writes Adhoc UPROPERTY ---
 	FString DialogueTextVal;
 	if (Params->TryGetStringField(TEXT("dialogue_text"), DialogueTextVal))
 	{
 		if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node))
 		{
-			Speech->DialogueText = FText::FromString(DialogueTextVal);
+			Speech->AdhocDialogueText = FText::FromString(DialogueTextVal);
 		}
 		else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node))
 		{
-			Choice->DialogueText = FText::FromString(DialogueTextVal);
+			Choice->AdhocDialogueText = FText::FromString(DialogueTextVal);
 		}
 	}
 
-	// --- choice_text (ChoiceItem only) ---
+	// --- choice_text (ChoiceItem only) — writes Adhoc UPROPERTY ---
 	if (UDialogueChoiceItemNode* Item = Cast<UDialogueChoiceItemNode>(Node))
 	{
 		FString ChoiceTextVal;
 		if (Params->TryGetStringField(TEXT("choice_text"), ChoiceTextVal))
 		{
-			Item->ChoiceText = FText::FromString(ChoiceTextVal);
+			Item->AdhocChoiceText = FText::FromString(ChoiceTextVal);
 		}
 	}
 
@@ -1097,7 +1093,7 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleAddDialogueChoiceItem(
 	FString ChoiceText;
 	if (Params->TryGetStringField(TEXT("choice_text"), ChoiceText))
 	{
-		NewItem->ChoiceText = FText::FromString(ChoiceText);
+		NewItem->AdhocChoiceText = FText::FromString(ChoiceText);
 	}
 
 	Asset->MarkPackageDirty();
@@ -1778,10 +1774,17 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleListDialogueNodes(
 		N->SetStringField(TEXT("node_id"), Node->NodeId.ToString());
 		N->SetStringField(TEXT("class"), Node->GetClass()->GetName());
 
-		const FString SpeakerRef = SpeakerArchReflect::ReadObjectPropertyPath(Node, TEXT("Speaker"));
-		const FString SpeakerId  = SpeakerArchReflect::ReadFNamePropertyString(Node, TEXT("SpeakerId"));
-		if (!SpeakerRef.IsEmpty()) N->SetStringField(TEXT("speaker_ref"), SpeakerRef);
-		if (!SpeakerId.IsEmpty())  N->SetStringField(TEXT("speaker_id"),  SpeakerId);
+		// Raw Adhoc UPROPERTY value via reflection (NAME_None when in Bound mode
+		// per design — Bound nodes don't store SpeakerID on the node, DB owns it).
+		const FString AdhocSpeakerId = SpeakerArchReflect::ReadFNamePropertyString(Node, TEXT("AdhocSpeakerId"));
+		if (!AdhocSpeakerId.IsEmpty()) N->SetStringField(TEXT("adhoc_speaker_id"), AdhocSpeakerId);
+
+		// Resolved (effective) SpeakerID via runtime accessor — handles Adhoc/Bound
+		// fallback. Most callers want this. For Speech / Choice nodes only.
+		FName ResolvedSid = NAME_None;
+		if (UDialogueSpeechNode* Speech = Cast<UDialogueSpeechNode>(Node)) ResolvedSid = Speech->GetSpeakerId();
+		else if (UDialogueChoiceNode* Choice = Cast<UDialogueChoiceNode>(Node)) ResolvedSid = Choice->GetSpeakerId();
+		if (!ResolvedSid.IsNone()) N->SetStringField(TEXT("speaker_id"), ResolvedSid.ToString());
 
 		NodesArr.Add(MakeShared<FJsonValueObject>(N));
 	};
@@ -1834,7 +1837,10 @@ TSharedPtr<FJsonObject> FUnrealMCPDialogueCommands::HandleSetDialogueNodeSpeaker
 
 	FString WriteErr;
 	const FName NewId = SpeakerIdStr.IsEmpty() ? NAME_None : FName(*SpeakerIdStr);
-	if (!SpeakerArchReflect::WriteFNameProperty(Node, TEXT("SpeakerId"), NewId, WriteErr))
+	// Writes the AdhocSpeakerId UPROPERTY. In Bound LineId mode runtime ignores
+	// it (DB lines.SpeakerID wins via GetSpeakerId() fallback) — but the value
+	// is preserved for when the user later unbinds the line.
+	if (!SpeakerArchReflect::WriteFNameProperty(Node, TEXT("AdhocSpeakerId"), NewId, WriteErr))
 	{
 		return FUnrealMCPCommonUtils::CreateErrorResponse(WriteErr);
 	}

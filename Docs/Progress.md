@@ -20,12 +20,31 @@
 16. 2026-04-23 (MCP-3: dialogue Line ID commands — bind/unbind/query/list/registry_info)
 17. 2026-04-24 (MCP-4: dialogue speaker migration — list_dialogue_nodes + set_dialogue_node_speaker_id, reflection-based to survive node schema change TObjectPtr<Speaker> → FName SpeakerId)
 18. 2026-04-25 (MCP-4 follow-up: track Adhoc UPROPERTY rename — list_dialogue_nodes returns adhoc_speaker_id raw + speaker_id resolved (via GetSpeakerId UFUNCTION); set_dialogue_node_properties / speaker_id writes go to AdhocSpeakerId/AdhocDialogueText/AdhocChoiceText)
+19. 2026-04-27 (MCP-4 follow-up: track DialogueSystem source layout refactor — UnrealMCPDialogueCommands.cpp include paths now reference subfolders Core/, Lines/, Graph/, Settings/, Runtime/, Nodes/, Assets/)
 
 ## Current Milestone
 
 1. Stabilize blueprint graph automation for consumer projects (`StupidChess` as first consumer).
 
 ## Completed
+
+1. UnrealMCPDialogue: track DialogueSystem source layout refactor (2026-04-27):
+   - Consumer DialogueSystemSample reorganized the `DialogueSystem` plugin
+     source tree into domain subfolders (`Core/`, `Lines/`, `Graph/`,
+     `Slate/`, `Validation/`, `Details/`, `Registry/`, `AssetEditors/`,
+     `Assets/`, `Sidecar/`, `DialogueManagement/`, `Nodes/`, `Settings/`,
+     `Runtime/`, etc.). Module structure unchanged.
+   - Mirrored the include path updates into the fork's
+     `UnrealMCPDialogueCommands.cpp` so the next `sync_unreal_mcp.sh` run
+     does not regress the consumer back to flat-include paths.
+   - Only the dispatcher TU was affected — 17 includes rewritten with
+     subfolder prefixes (`Core/DialogueAsset.h`, `Lines/LineRegistry.h`,
+     `Graph/DialogueGraphSchema.h`, `Settings/DialogueSettings.h`,
+     `Runtime/DialogueConditionEvaluator.h`, `Nodes/StateGraphNode.h`,
+     `Assets/DialogueAssetFactory.h`, etc.). No command behavior change.
+   - Build verification skipped on fork side — the fork's vendored
+     DialogueSystem copy is on the pre-refactor layout, so an isolated
+     fork build would fail; downstream rebuild already passed.
 
 1. MCP-3 dialogue Line ID commands (2026-04-23):
    - Added 5 commands to the `UnrealMCPDialogue` extension to mirror the
